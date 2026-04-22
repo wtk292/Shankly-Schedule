@@ -793,5 +793,6 @@ function EventModal({open,onClose,form,setForm,coaches,onSave,inp}){
         <Btn outline onClick={onClose}>Cancel</Btn>
         <Btn gold onClick={onSave}>Add Event</Btn>
       </div>
-    </Modal>
+        </Modal>
   )
+}
