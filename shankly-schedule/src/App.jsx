@@ -488,7 +488,7 @@ export default function App(){
     if(!soloF.client||!soloF.date||!soloF.time||!soloF.coachId){setToast('Fill in all required fields');return}
     if(saving)return;setSaving(true)
     await push(ref(db,'sessions'),{type:'solo',clientName:soloF.client,date:soloF.date,time:soloF.time,duration:parseInt(soloF.dur),coachId:soloF.coachId,notes:soloF.notes,repeat:'once'})
-    notifyCoach(soloF.coachId,`New 1-on-1 Session`,`${soloF.client} · ${soloF.date} at ${fmt12(soloF.time)}`,db)
+    if(soloF.coachId!==loggedInCoach?.id)notifyCoach(soloF.coachId,`New 1-on-1 Session`,`${soloF.client} · ${soloF.date} at ${fmt12(soloF.time)}`,db)
     setSoloOpen(false);setSoloF(blankSolo);setToast('1-on-1 assigned ✓');setSaving(false)
   }
   async function saveGroup(){
@@ -499,7 +499,7 @@ export default function App(){
     if(saving)return;setSaving(true)
     await push(ref(db,'sessions'),sess)
     const when=groupF.repeat==='weekly'?`Every ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][parseInt(groupF.dow)]}`:groupF.date
-    notifyCoach(groupF.coachId,'New Group Session',`${groupF.name} · ${when} at ${fmt12(groupF.time)}`,db)
+    if(groupF.coachId!==loggedInCoach?.id)notifyCoach(groupF.coachId,'New Group Session',`${groupF.name} · ${when} at ${fmt12(groupF.time)}`,db)
     setGroupOpen(false);setGroupF(blankGroup);setToast('Group session added ✓');setSaving(false)
   }
   async function saveEdit(){
@@ -556,7 +556,7 @@ export default function App(){
     await set(ref(db,`sessions/${sessionId}/confirmedBy/${loggedInCoach.id}`),true)
     const sess=sessions.find(s=>s.id===sessionId)
     if(sess){
-      const adminCoaches=coaches.filter(c=>c.isAdmin)
+      const adminCoaches=coaches.filter(c=>c.isAdmin&&c.id!==loggedInCoach.id)
       adminCoaches.forEach(c=>notifyCoach(c.id,'Session Confirmed ✓',`${loggedInCoach.name} confirmed: ${sess.type==='solo'?`1-on-1 · ${sess.clientName}`:sess.name}`,db))
     }
     setToast('Session confirmed ✓')
