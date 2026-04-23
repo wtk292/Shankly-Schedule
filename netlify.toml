@@ -1,6 +1,8 @@
 [build]
+  base = "shankly-schedule"
   command = "npm install && npm run build"
-  publish = "dist"
+  publish = "shankly-schedule/dist"
+  functions = "shankly-schedule/netlify/functions"
 
 [build.environment]
   NODE_VERSION = "18"
