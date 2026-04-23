@@ -1207,12 +1207,15 @@ export default function App(){
         {coachTab==='schedule'&&(
           <div style={{flex:1,overflowY:'auto'}}>
             <div style={{padding:'12px 16px 8px',display:'flex',gap:8,alignItems:'center'}}>
-              <select value={coachCalView} onChange={e=>setCoachCalView(e.target.value)}
-                style={{...inp,fontSize:12,padding:'6px 10px',width:'auto',minWidth:130}}>
-                <option value="day">📅 Day</option>
-                <option value="week">☰ Week</option>
-                <option value="month">🗓 Month</option>
-              </select>
+              <div style={{position:'relative',display:'inline-block'}}>
+                <select value={coachCalView} onChange={e=>setCoachCalView(e.target.value)}
+                  style={{appearance:'none',WebkitAppearance:'none',background:GRAY2,border:`1px solid ${GOLD}`,borderRadius:8,color:WHITE,fontSize:13,fontWeight:700,padding:'7px 34px 7px 12px',cursor:'pointer',fontFamily:'inherit',minWidth:120}}>
+                  <option value="day">📅 Day</option>
+                  <option value="week">☰ Week</option>
+                  <option value="month">🗓 Month</option>
+                </select>
+                <span style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',pointerEvents:'none',color:GOLD,fontSize:12}}>▾</span>
+              </div>
               {coachCalView==='day'&&(
                 <div style={{display:'flex',alignItems:'center',gap:6,flex:1,justifyContent:'flex-end'}}>
                   <NavBtn onClick={()=>{const d=new Date(coachDayDate);d.setDate(d.getDate()-1);setCoachDayDate(d)}}>‹</NavBtn>
