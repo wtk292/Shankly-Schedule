@@ -1021,7 +1021,6 @@ export default function App(){
             {Object.entries(availability).flatMap(([cId,dates])=>Object.entries(dates).filter(([,v])=>v).map(([dk])=>{
               const coach=coaches.find(c=>c.id===cId)
               return(<div key={cId+dk} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 10px',background:GRAY2,borderRadius:6,marginBottom:5}}>
-              return(<div key={cId+dk} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 10px',background:GRAY2,borderRadius:6,marginBottom:5}}>
                 <span style={{fontSize:12}}>{coach?.name||'Unknown'} · {dk}</span>
                 <button onClick={async()=>{await remove(ref(db,`availability/${cId}/${dk}`));setToast('Removed')}} style={{background:'transparent',border:'none',color:DIM,cursor:'pointer',fontSize:14}}>×</button>
               </div>)
@@ -1330,4 +1329,3 @@ export default function App(){
 
   return null
 }
-
