@@ -411,7 +411,19 @@ export default function App(){
   },[])
 
   useEffect(()=>{if(!toast)return;const t=setTimeout(()=>setToast(''),2400);return()=>clearTimeout(t)},[toast])
-  useEffect(()=>{if(coachTab==='chat')chatEndRef.current?.scrollIntoView({behavior:'smooth'})},[messages,coachTab])
+  useEffect(()=>{
+    if(coachTab==='chat'){
+      chatEndRef.current?.scrollIntoView({behavior:'smooth'})
+    } else {
+      // Reset scroll to top when switching away from chat
+      window.scrollTo(0,0)
+      document.documentElement.scrollTop=0
+      document.body.scrollTop=0
+    }
+  },[coachTab])
+  useEffect(()=>{
+    if(coachTab==='chat')chatEndRef.current?.scrollIntoView({behavior:'smooth'})
+  },[messages])
 
   function getSessionsForCoach(coachId,date){
     const dk=dateKey(date),dow=date.getDay()
