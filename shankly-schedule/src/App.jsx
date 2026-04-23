@@ -441,6 +441,8 @@ export default function App(){
     const sess={type:'group',name:groupF.name,time:groupF.time,duration:parseInt(groupF.dur),coachId:groupF.coachId,repeat:groupF.repeat}
     if(groupF.repeat==='weekly')sess.dow=parseInt(groupF.dow);else sess.date=groupF.date
     await push(ref(db,'sessions'),sess)
+    const when=groupF.repeat==='weekly'?`Every ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][parseInt(groupF.dow)]}`:groupF.date
+    notifyCoach(groupF.coachId,'New Group Session',`${groupF.name} · ${when} at ${fmt12(groupF.time)}`,db)
     setGroupOpen(false);setGroupF(blankGroup);setToast('Group session added ✓')
   }
   async function saveEdit(){
@@ -1159,3 +1161,4 @@ export default function App(){
 
   return null
 }
+
