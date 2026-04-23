@@ -310,7 +310,9 @@ export default function App(){
   const[timeOffRequests,setTimeOffRequests]=useState([])
   const[loading,setLoading]=useState(true)
   const[toast,setToast]=useState('')
-  const[loggedInCoach,setLoggedInCoach]=useState(null)
+  const[loggedInCoach,setLoggedInCoach]=useState(()=>{
+    try{const id=localStorage.getItem('shankly_coach_id');return id?{id}:null}catch{return null}
+  })
   const[coachTab,setCoachTab]=useState('schedule')
   const[opsDate,setOpsDate]=useState(todayMidnight)
   const[summaryDate,setSummaryDate]=useState(todayMidnight)
@@ -540,11 +542,30 @@ export default function App(){
   }
   function checkPin(pin){
     const coach=coaches.find(c=>c.pin===pin)
-    if(coach){setLoggedInCoach(coach);setPinVal('');setPinError('');setCoachTab('schedule');setView('coach');setupNotifications(coach.id)}
+    if(coach){
+      setLoggedInCoach(coach);setPinVal('');setPinError('');setCoachTab('schedule');setView('coach');setupNotifications(coach.id)
+      try{localStorage.setItem('shankly_coach_id',coach.id)}catch{}
+    }
     else{setPinError('Incorrect PIN. Try again.');setPinVal('')}
   }
-  function logout(){setLoggedInCoach(null);setView('landing');setCoachTab('schedule')}
+  function logout(){
+    setLoggedInCoach(null);setView('landing');setCoachTab('schedule')
+    try{localStorage.removeItem('shankly_coach_id')}catch{}
+  }
   useEffect(()=>{if(pinVal.length>=4&&view==='pin'){checkPin(pinVal)}},[pinVal,coaches])
+
+  // Restore session from localStorage once coaches load
+  useEffect(()=>{
+    if(coaches.length===0)return
+    try{
+      const savedId=localStorage.getItem('shankly_coach_id')
+      if(savedId&&!loggedInCoach){
+        const coach=coaches.find(c=>c.id===savedId)
+        if(coach){setLoggedInCoach(coach);setView('coach');setupNotifications(coach.id)}
+        else{localStorage.removeItem('shankly_coach_id')}
+      }
+    }catch{}
+  },[coaches])
 
   // ── LANDING ──────────────────────────────────────────────────────
   if(view==='landing')return(
