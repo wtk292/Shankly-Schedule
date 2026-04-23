@@ -203,14 +203,14 @@ function BottomNav({tab,setTab,isAdmin,onOps}){
     <div style={{position:'fixed',bottom:0,left:0,right:0,zIndex:50,background:'#111',borderTop:`1px solid ${GRAY3}`,display:'flex',alignItems:'stretch',paddingBottom:'calc(env(safe-area-inset-bottom) + 4px)'}}>
       {tabs.map(t=>(
         <button key={t.id} onClick={()=>setTab(t.id)} style={{flex:1,background:'transparent',border:'none',cursor:'pointer',padding:'8px 4px 6px',display:'flex',flexDirection:'column',alignItems:'center',gap:3,transition:'all 0.15s',fontFamily:'inherit'}}>
-          <img src={t.icon} alt={t.label} style={{width:24,height:24,objectFit:'contain',opacity:tab===t.id?1:0.5}}/>
+          <img src={t.icon} alt={t.label} style={{width:32,height:32,objectFit:'contain',opacity:tab===t.id?1:0.5}}/>
           <span style={{fontSize:9,fontWeight:tab===t.id?800:400,color:tab===t.id?GOLD:DIM,letterSpacing:0.3,textTransform:'uppercase'}}>{t.label}</span>
           {tab===t.id&&<div style={{width:4,height:4,borderRadius:'50%',background:GOLD,marginTop:1}}/>}
         </button>
       ))}
       {isAdmin&&(
         <button onClick={onOps} style={{flex:1,background:'transparent',border:'none',cursor:'pointer',padding:'8px 4px 6px',display:'flex',flexDirection:'column',alignItems:'center',gap:3,fontFamily:'inherit',borderLeft:`1px solid ${GRAY3}`}}>
-          <img src={ICON_OPS} alt='Ops' style={{width:24,height:24,objectFit:'contain',opacity:1}}/>
+          <img src={ICON_OPS} alt='Ops' style={{width:32,height:32,objectFit:'contain',opacity:1}}/>
           <span style={{fontSize:9,fontWeight:400,color:GOLD,letterSpacing:0.3,textTransform:'uppercase'}}>Ops</span>
         </button>
       )}
@@ -229,7 +229,7 @@ function OpsBottomNav({tab,setTab,pendingCount}){
     <div style={{position:'fixed',bottom:0,left:0,right:0,zIndex:50,background:'#111',borderTop:`1px solid ${GRAY3}`,display:'flex',alignItems:'stretch',paddingBottom:'calc(env(safe-area-inset-bottom) + 4px)'}}>
       {tabs.map(t=>(
         <button key={t.id} onClick={()=>setTab(t.id)} style={{flex:1,background:'transparent',border:'none',cursor:'pointer',padding:'8px 4px 6px',display:'flex',flexDirection:'column',alignItems:'center',gap:3,transition:'all 0.15s',fontFamily:'inherit',position:'relative'}}>
-          <img src={t.icon} alt={t.label} style={{width:24,height:24,objectFit:'contain',opacity:tab===t.id?1:0.5}}/>
+          <img src={t.icon} alt={t.label} style={{width:32,height:32,objectFit:'contain',opacity:tab===t.id?1:0.5}}/>
           <span style={{fontSize:9,fontWeight:tab===t.id?800:400,color:tab===t.id?GOLD:DIM,letterSpacing:0.3,textTransform:'uppercase'}}>{t.label}</span>
           {t.id==='timeoff'&&pendingCount>0&&<span style={{position:'absolute',top:4,right:'calc(50% - 14px)',background:ORANGE,color:BLACK,fontSize:8,fontWeight:900,padding:'1px 4px',borderRadius:10}}>{pendingCount}</span>}
           {tab===t.id&&<div style={{width:4,height:4,borderRadius:'50%',background:GOLD,marginTop:1}}/>}
