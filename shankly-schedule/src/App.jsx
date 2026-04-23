@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { db } from './firebase.js'
 import { ref, onValue, push, remove, set } from 'firebase/database'
 
@@ -27,6 +27,7 @@ function objToArr(obj){if(!obj)return[];return Object.entries(obj).map(([id,val]
 function getWeekStart(){const d=todayMidnight();d.setDate(d.getDate()-d.getDay());return d}
 function getWeekEnd(){const d=getWeekStart();d.setDate(d.getDate()+6);return d}
 function fmtTime(ts){const d=new Date(ts);return d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true})}
+function addDays(date,n){const d=new Date(date);d.setDate(d.getDate()+n);return d}
 
 const inp={width:'100%',background:BLACK,border:`1px solid ${GRAY3}`,borderRadius:7,color:WHITE,fontFamily:'inherit',fontSize:14,padding:'10px 12px',outline:'none',WebkitAppearance:'none',appearance:'none',boxSizing:'border-box'}
 const lbl={display:'block',fontSize:10,fontWeight:700,letterSpacing:1.5,textTransform:'uppercase',color:DIM,marginBottom:6}
@@ -40,13 +41,6 @@ function Btn({gold,outline,danger,onClick,children,style={},disabled=false}){
   if(danger)return<button disabled={disabled} onClick={onClick} onMouseEnter={()=>setH(true)} onMouseLeave={()=>setH(false)} style={{...base,background:h?'#922':'transparent',color:h?WHITE:RED,border:'1px solid #922'}}>{children}</button>
   if(outline)return<button disabled={disabled} onClick={onClick} onMouseEnter={()=>setH(true)} onMouseLeave={()=>setH(false)} style={{...base,background:'transparent',color:h?GOLD:WHITE,border:`1px solid ${h?GOLD:GRAY3}`}}>{children}</button>
   return<button disabled={disabled} onClick={onClick} style={{...base,background:'transparent',border:'none',color:DIM}}>{children}</button>
-}
-
-function HomeBtn({onClick}){
-  const[h,setH]=useState(false)
-  return<button onClick={onClick} onMouseEnter={()=>setH(true)} onMouseLeave={()=>setH(false)} style={{background:h?GOLD:'rgba(245,197,24,0.12)',border:`1px solid ${h?GOLD:'rgba(245,197,24,0.3)'}`,color:h?BLACK:GOLD,borderRadius:8,padding:'6px 12px',cursor:'pointer',fontSize:13,fontWeight:700,letterSpacing:1,transition:'all 0.15s',fontFamily:'inherit',display:'flex',alignItems:'center',gap:5}}>
-    ⌂ <span style={{fontSize:11}}>Home</span>
-  </button>
 }
 
 function ToggleBtn({active,onClick,children}){
@@ -125,18 +119,6 @@ function StatPill({label,value,color}){
     <div style={{background:GRAY,border:`1px solid ${GRAY2}`,borderRadius:10,padding:'12px 16px',flex:1,minWidth:90,textAlign:'center'}}>
       <div style={{fontSize:26,fontWeight:900,color,lineHeight:1}}>{value}</div>
       <div style={{fontSize:10,color:DIM,marginTop:4,letterSpacing:0.5}}>{label}</div>
-    </div>
-  )
-}
-
-function LandingCard({icon,title,desc,onClick}){
-  const[h,setH]=useState(false)
-  return(
-    <div onClick={onClick} onMouseEnter={()=>setH(true)} onMouseLeave={()=>setH(false)}
-      style={{background:h?'#1f1f1f':GRAY,border:`1px solid ${h?GOLD:GRAY3}`,borderRadius:14,padding:'26px 20px',flex:1,minWidth:140,cursor:'pointer',transition:'all 0.2s',textAlign:'center',transform:h?'translateY(-3px)':'none'}}>
-      <div style={{fontSize:28,marginBottom:10}}>{icon}</div>
-      <div style={{fontSize:15,fontWeight:900,letterSpacing:2,textTransform:'uppercase',color:GOLD,marginBottom:6}}>{title}</div>
-      <div style={{fontSize:11,color:DIM,lineHeight:1.6}}>{desc}</div>
     </div>
   )
 }
@@ -275,6 +257,7 @@ export default function App(){
   const[messages,setMessages]=useState([])
   const[announcement,setAnnouncement]=useState(null)
   const[availability,setAvailability]=useState({})
+  const[timeOffRequests,setTimeOffRequests]=useState([])
   const[loading,setLoading]=useState(true)
   const[toast,setToast]=useState('')
   const[loggedInCoach,setLoggedInCoach]=useState(null)
@@ -307,11 +290,14 @@ export default function App(){
   const[announceOpen,setAnnounceOpen]=useState(false)
   const[availOpen,setAvailOpen]=useState(false)
   const[statsOpen,setStatsOpen]=useState(false)
+  const[timeOffOpen,setTimeOffOpen]=useState(false)
+  const[timeOffReqOpen,setTimeOffReqOpen]=useState(false)
 
   const blankSolo={client:'',date:'',time:'',dur:'60',coachId:'',notes:''}
   const blankGroup={name:'',repeat:'weekly',dow:'1',date:'',time:'',dur:'60',coachId:''}
   const blankEvent={title:'',date:'',startTime:'',endTime:'',coachIds:[],brand:'both'}
-  const blankNewCoach={name:'',role:'mixed',pin:''}
+  const blankNewCoach={name:'',role:'mixed',pin:'',isAdmin:false}
+  const blankTimeOffReq={startDate:'',endDate:'',reason:''}
   const[soloF,setSoloF]=useState(blankSolo)
   const[groupF,setGroupF]=useState(blankGroup)
   const[eventF,setEventF]=useState(blankEvent)
@@ -323,9 +309,11 @@ export default function App(){
   const[chatMsg,setChatMsg]=useState('')
   const[editCoach,setEditCoach]=useState(null)
   const[editCoachPin,setEditCoachPin]=useState('')
+  const[timeOffReqF,setTimeOffReqF]=useState(blankTimeOffReq)
+  const chatEndRef=useRef(null)
 
   useEffect(()=>{
-    let d=[false,false,false,false,false,false]
+    let d=[false,false,false,false,false,false,false]
     const check=()=>{if(d.every(Boolean))setLoading(false)}
     const u1=onValue(ref(db,'coaches'),s=>{setCoaches(objToArr(s.val()));d[0]=true;check()})
     const u2=onValue(ref(db,'sessions'),s=>{setSessions(objToArr(s.val()));d[1]=true;check()})
@@ -333,10 +321,12 @@ export default function App(){
     const u4=onValue(ref(db,'announcement'),s=>{setAnnouncement(s.val());d[3]=true;check()})
     const u5=onValue(ref(db,'availability'),s=>{setAvailability(s.val()||{});d[4]=true;check()})
     const u6=onValue(ref(db,'chat'),s=>{setMessages(objToArr(s.val()).sort((a,b)=>a.ts-b.ts));d[5]=true;check()})
-    return()=>{u1();u2();u3();u4();u5();u6()}
+    const u7=onValue(ref(db,'timeOff'),s=>{setTimeOffRequests(objToArr(s.val()));d[6]=true;check()})
+    return()=>{u1();u2();u3();u4();u5();u6();u7()}
   },[])
 
   useEffect(()=>{if(!toast)return;const t=setTimeout(()=>setToast(''),2400);return()=>clearTimeout(t)},[toast])
+  useEffect(()=>{chatEndRef.current?.scrollIntoView({behavior:'smooth'})},[messages,coachTab])
 
   function getSessionsForCoach(coachId,date){
     const dk=dateKey(date),dow=date.getDay()
@@ -402,6 +392,8 @@ export default function App(){
     setEditOpen(true)
   }
 
+  const pendingTimeOff=timeOffRequests.filter(r=>r.status==='pending')
+
   async function saveSolo(){
     if(!soloF.client||!soloF.date||!soloF.time||!soloF.coachId){setToast('Fill in all required fields');return}
     await push(ref(db,'sessions'),{type:'solo',clientName:soloF.client,date:soloF.date,time:soloF.time,duration:parseInt(soloF.dur),coachId:soloF.coachId,notes:soloF.notes,repeat:'once'})
@@ -430,7 +422,7 @@ export default function App(){
     if(!newCoach.name.trim()){setToast('Enter a name');return}
     if(!newCoach.pin||newCoach.pin.length<4){setToast('PIN must be at least 4 digits');return}
     if(coaches.some(c=>c.pin===newCoach.pin)){setToast('That PIN is already taken');return}
-    await push(ref(db,'coaches'),{name:newCoach.name.trim(),role:newCoach.role,pin:newCoach.pin})
+    await push(ref(db,'coaches'),{name:newCoach.name.trim(),role:newCoach.role,pin:newCoach.pin,isAdmin:newCoach.isAdmin||false})
     setNewCoach(blankNewCoach);setToast(`${newCoach.name.trim()} added ✓`)
   }
 
@@ -445,6 +437,11 @@ export default function App(){
     if(coaches.some(c=>c.pin===editCoachPin&&c.id!==editCoach.id)){setToast('That PIN is already taken');return}
     await set(ref(db,`coaches/${editCoach.id}/pin`),editCoachPin)
     setEditCoach(null);setEditCoachPin('');setToast('PIN updated ✓')
+  }
+
+  async function toggleAdminStatus(coach){
+    await set(ref(db,`coaches/${coach.id}/isAdmin`),!coach.isAdmin)
+    setToast(`${coach.name} ${!coach.isAdmin?'is now an admin':'is no longer an admin'}`)
   }
 
   async function removeSession(id){await remove(ref(db,`sessions/${id}`));setToast('Session removed')}
@@ -479,7 +476,23 @@ export default function App(){
     setChatMsg('')
   }
 
-  async function deleteMessage(id){await remove(ref(db,`chat/${id}`));setToast('Message deleted')}
+  async function submitTimeOffRequest(){
+    if(!timeOffReqF.startDate||!timeOffReqF.endDate){setToast('Select start and end dates');return}
+    if(!loggedInCoach)return
+    await push(ref(db,'timeOff'),{coachId:loggedInCoach.id,coachName:loggedInCoach.name,startDate:timeOffReqF.startDate,endDate:timeOffReqF.endDate,reason:timeOffReqF.reason,status:'pending',submittedAt:Date.now()})
+    setTimeOffReqOpen(false);setTimeOffReqF(blankTimeOffReq);setToast('Time off request submitted ✓')
+  }
+
+  async function approveTimeOff(req){
+    const start=new Date(req.startDate+'T00:00:00'),end=new Date(req.endDate+'T00:00:00')
+    let cur=new Date(start)
+    while(cur<=end){await set(ref(db,`availability/${req.coachId}/${dateKey(cur)}`),true);cur=addDays(cur,1)}
+    await set(ref(db,`timeOff/${req.id}/status`),'approved')
+    setToast('Approved — dates marked unavailable')
+  }
+
+  async function denyTimeOff(id){await set(ref(db,`timeOff/${id}/status`),'denied');setToast('Request denied')}
+  async function deleteTimeOffRequest(id){await remove(ref(db,`timeOff/${id}`));setToast('Request deleted')}
 
   function checkOpsPassword(){
     if(pwVal===PASSWORD){setPwError('');setPwVal('');setView('ops')}
@@ -488,7 +501,7 @@ export default function App(){
 
   function checkPin(pin){
     const coach=coaches.find(c=>c.pin===pin)
-    if(coach){setLoggedInCoach(coach);setPinVal('');setPinError('');setView('coach')}
+    if(coach){setLoggedInCoach(coach);setPinVal('');setPinError('');setCoachTab('schedule');setView('coach')}
     else{setPinError('Incorrect PIN. Try again.');setPinVal('')}
   }
 
@@ -498,44 +511,41 @@ export default function App(){
     if(pinVal.length>=4&&view==='pin'){checkPin(pinVal)}
   },[pinVal,coaches])
 
-  // LANDING
   if(view==='landing')return(
     <div style={{...PAGE,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'48px 20px',textAlign:'center'}}>
-      {announcement&&(
-        <div style={{background:'rgba(245,197,24,0.1)',border:'1px solid rgba(245,197,24,0.3)',borderRadius:10,padding:'12px 18px',marginBottom:28,maxWidth:500,width:'100%',display:'flex',gap:10,alignItems:'flex-start'}}>
-          <span>📢</span>
-          <div style={{fontSize:13,color:WHITE,lineHeight:1.5,textAlign:'left'}}>{announcement.text}</div>
-        </div>
-      )}
       <div style={{fontSize:52,fontWeight:900,letterSpacing:6,textTransform:'uppercase',color:GOLD,lineHeight:1}}>SHANKLY</div>
-      <div style={{fontSize:11,letterSpacing:4,textTransform:'uppercase',color:DIM,margin:'6px 0 48px'}}>Elite Training · Schedule</div>
-      <div style={{display:'flex',gap:14,flexWrap:'wrap',justifyContent:'center',maxWidth:560,width:'100%'}}>
-        <LandingCard icon="🔐" title="Coach Login" desc="Enter your PIN to access your schedule and team chat" onClick={()=>{setPinVal('');setPinError('');setView('pin')}}/>
-        <LandingCard icon="⚡" title="Staff Login"  desc="Ops access — assign sessions and manage the team"    onClick={()=>{setPwVal('');setPwError('');setView('password')}}/>
-      </div>
-      <div style={{marginTop:14,display:'flex',gap:14,flexWrap:'wrap',justifyContent:'center',maxWidth:560,width:'100%'}}>
-        <LandingCard icon="🏟️" title="Facility"      desc="See what's happening at Goalz & Shankly"           onClick={()=>setView('facility')}/>
-        <LandingCard icon="📊" title="Daily Summary" desc="Full day schedule across all coaches"               onClick={()=>setView('summary')}/>
+      <div style={{fontSize:11,letterSpacing:4,textTransform:'uppercase',color:DIM,margin:'6px 0 52px'}}>Elite Training · Schedule</div>
+      <div style={{display:'flex',flexDirection:'column',gap:14,width:'100%',maxWidth:340}}>
+        <button onClick={()=>{setPinVal('');setPinError('');setView('pin')}}
+          style={{background:GOLD,border:'none',color:BLACK,fontSize:16,fontWeight:900,padding:'18px',borderRadius:12,cursor:'pointer',letterSpacing:1,fontFamily:'inherit',transition:'all 0.15s'}}
+          onMouseEnter={e=>e.currentTarget.style.background='#ffd740'}
+          onMouseLeave={e=>e.currentTarget.style.background=GOLD}>
+          🔐 Coach Login
+        </button>
+        <button onClick={()=>{setPwVal('');setPwError('');setView('password')}}
+          style={{background:'transparent',border:`1px solid ${GRAY3}`,color:WHITE,fontSize:14,fontWeight:700,padding:'16px',borderRadius:12,cursor:'pointer',letterSpacing:0.5,fontFamily:'inherit',transition:'all 0.15s'}}
+          onMouseEnter={e=>{e.currentTarget.style.borderColor=GOLD;e.currentTarget.style.color=GOLD}}
+          onMouseLeave={e=>{e.currentTarget.style.borderColor=GRAY3;e.currentTarget.style.color=WHITE}}>
+          ⚡ Staff Login
+        </button>
       </div>
     </div>
   )
 
-  // PIN LOGIN
   if(view==='pin')return(
     <div style={{...PAGE,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'40px 20px',textAlign:'center'}}>
       <div style={{fontSize:36,fontWeight:900,letterSpacing:5,textTransform:'uppercase',color:GOLD,marginBottom:4}}>SHANKLY</div>
       <div style={{fontSize:10,letterSpacing:3,textTransform:'uppercase',color:DIM,marginBottom:32}}>Coach Login</div>
       <div style={{background:GRAY,border:`1px solid rgba(245,197,24,0.2)`,borderRadius:14,padding:'32px 28px',width:'100%',maxWidth:340}}>
         <div style={{fontSize:16,fontWeight:700,marginBottom:6}}>Enter your PIN</div>
-        <div style={{fontSize:12,color:DIM,marginBottom:24}}>Your unique 4-digit code</div>
-        <PinPad value={pinVal} onChange={v=>{setPinError('');setPinVal(v)}}/>
+        <div style={{fontSize:12,color:DIM,marginBottom:24}}>Your unique code</div>
+        <PinPad value={pinVal} onChange={v=>{setPinError('');setPinVal(v)}} maxLen={6}/>
         {pinError&&<div style={{fontSize:12,color:RED,marginTop:16}}>{pinError}</div>}
         <div onClick={()=>{setView('landing');setPinVal('');setPinError('')}} style={{fontSize:12,color:DIM,cursor:'pointer',marginTop:20,textDecoration:'underline'}}>← Back</div>
       </div>
     </div>
   )
 
-  // OPS PASSWORD
   if(view==='password')return(
     <div style={{...PAGE,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'40px 20px',textAlign:'center'}}>
       <div style={{fontSize:36,fontWeight:900,letterSpacing:5,textTransform:'uppercase',color:GOLD,marginBottom:4}}>SHANKLY</div>
@@ -552,344 +562,401 @@ export default function App(){
     </div>
   )
 
-  // OPS VIEW
-  if(view==='ops')return(
-    <div style={PAGE}>
-      <div style={HDR}>
-        <div style={{display:'flex',alignItems:'baseline',gap:8}}>
-          <span style={{fontSize:20,fontWeight:900,letterSpacing:3,textTransform:'uppercase',color:GOLD}}>SHANKLY</span>
-          <span style={{fontSize:10,letterSpacing:2,textTransform:'uppercase',color:DIM}}>Ops</span>
-        </div>
-        <div style={{display:'flex',gap:7,flexWrap:'wrap',alignItems:'center'}}>
-          <Btn outline onClick={()=>setCoachMgmtOpen(true)}>Coaches</Btn>
-          <Btn outline onClick={()=>setAvailOpen(true)}>Availability</Btn>
-          <Btn outline onClick={()=>setStatsOpen(true)}>Stats</Btn>
-          <Btn outline onClick={()=>{setAnnounceText(announcement?.text||'');setAnnounceOpen(true)}}>📢</Btn>
-          <Btn outline onClick={()=>{setGroupF({...blankGroup,coachId:eligibleCoaches(['group','mixed'])[0]?.id||''});setGroupOpen(true)}}>+ Group</Btn>
-          <Btn gold onClick={()=>{setSoloF({...blankSolo,date:dateKey(opsDate),coachId:eligibleCoaches(['solo','mixed'])[0]?.id||''});setSoloOpen(true)}}>+ 1-on-1</Btn>
-          <HomeBtn onClick={()=>setView('landing')}/>
-        </div>
-      </div>
-
-      {announcement&&(
-        <div style={{background:'rgba(245,197,24,0.08)',borderBottom:`1px solid rgba(245,197,24,0.2)`,padding:'10px 16px',display:'flex',alignItems:'center',gap:10,justifyContent:'space-between'}}>
-          <div style={{display:'flex',gap:8,alignItems:'center'}}><span>📢</span><span style={{fontSize:12,color:WHITE}}>{announcement.text}</span></div>
-          <button onClick={clearAnnouncement} style={{background:'transparent',border:'none',color:DIM,cursor:'pointer',fontSize:18}}>×</button>
-        </div>
-      )}
-
-      <div style={{padding:'16px'}}>
-        <div style={{display:'flex',gap:8,marginBottom:16,alignItems:'center',flexWrap:'wrap'}}>
-          <ToggleBtn active={opsCalView==='list'} onClick={()=>setOpsCalView('list')}>☰ List</ToggleBtn>
-          <ToggleBtn active={opsCalView==='calendar'} onClick={()=>setOpsCalView('calendar')}>📅 Calendar</ToggleBtn>
-          {opsCalView==='list'&&(
-            <div style={{display:'flex',alignItems:'center',gap:8,marginLeft:'auto',flexWrap:'wrap'}}>
-              <NavBtn onClick={()=>{const d=new Date(opsDate);d.setDate(d.getDate()-1);setOpsDate(d)}}>‹</NavBtn>
-              <span style={{fontSize:16,fontWeight:800,textTransform:'uppercase'}}>{fmtLong(opsDate)}</span>
-              {isToday(opsDate)&&<span style={{background:GOLD,color:BLACK,fontSize:9,fontWeight:800,letterSpacing:1.5,textTransform:'uppercase',padding:'2px 8px',borderRadius:20}}>Today</span>}
-              <NavBtn onClick={()=>{const d=new Date(opsDate);d.setDate(d.getDate()+1);setOpsDate(d)}}>›</NavBtn>
-              <Btn outline onClick={()=>setOpsDate(todayMidnight())} style={{fontSize:10,padding:'5px 10px'}}>Today</Btn>
-            </div>
-          )}
-          {opsCalView==='calendar'&&(
-            <div style={{display:'flex',alignItems:'center',gap:8,marginLeft:'auto'}}>
-              <NavBtn onClick={()=>changeMonth(opsCalMonth,-1,setOpsCalMonth)}>‹</NavBtn>
-              <span style={{fontSize:14,fontWeight:800,textTransform:'uppercase'}}>{MONTHS[opsCalMonth.month]} {opsCalMonth.year}</span>
-              <NavBtn onClick={()=>changeMonth(opsCalMonth,1,setOpsCalMonth)}>›</NavBtn>
-            </div>
-          )}
+  if(view==='ops'){
+    const pendingCount=pendingTimeOff.length
+    return(
+      <div style={PAGE}>
+        <div style={HDR}>
+          <div style={{display:'flex',alignItems:'baseline',gap:8}}>
+            <span style={{fontSize:20,fontWeight:900,letterSpacing:3,textTransform:'uppercase',color:GOLD}}>SHANKLY</span>
+            <span style={{fontSize:10,letterSpacing:2,textTransform:'uppercase',color:DIM}}>Ops</span>
+          </div>
+          <div style={{display:'flex',gap:7,flexWrap:'wrap',alignItems:'center'}}>
+            <Btn outline onClick={()=>setCoachMgmtOpen(true)}>Coaches</Btn>
+            <Btn outline onClick={()=>setAvailOpen(true)}>Availability</Btn>
+            <Btn outline onClick={()=>setStatsOpen(true)}>Stats</Btn>
+            <Btn outline onClick={()=>{setAnnounceText(announcement?.text||'');setAnnounceOpen(true)}}>📢</Btn>
+            <button onClick={()=>setTimeOffOpen(true)} style={{background:'transparent',border:`1px solid ${pendingCount>0?ORANGE:GRAY3}`,color:pendingCount>0?ORANGE:WHITE,fontSize:12,fontWeight:700,padding:'8px 14px',borderRadius:7,cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap'}}>
+              Time Off{pendingCount>0&&<span style={{background:ORANGE,color:BLACK,fontSize:9,fontWeight:900,padding:'1px 5px',borderRadius:10,marginLeft:5}}>{pendingCount}</span>}
+            </button>
+            <Btn outline onClick={()=>{setGroupF({...blankGroup,coachId:eligibleCoaches(['group','mixed'])[0]?.id||''});setGroupOpen(true)}}>+ Group</Btn>
+            <Btn gold onClick={()=>{setSoloF({...blankSolo,date:dateKey(opsDate),coachId:eligibleCoaches(['solo','mixed'])[0]?.id||''});setSoloOpen(true)}}>+ 1-on-1</Btn>
+            {loggedInCoach
+              ?<Btn outline onClick={()=>setView('coach')}>← My Schedule</Btn>
+              :<button onClick={()=>setView('landing')} style={{background:'transparent',border:`1px solid ${GRAY3}`,color:DIM,fontSize:12,fontWeight:700,padding:'8px 14px',borderRadius:7,cursor:'pointer',fontFamily:'inherit'}}>Log Out</button>
+            }
+          </div>
         </div>
 
-        <div style={{display:'flex',gap:14,marginBottom:14,flexWrap:'wrap'}}>
-          {[[GOLD,'Group'],[BLUE,'1-on-1'],[PURPLE,'Facility'],[ORANGE,'Unavailable']].map(([c,l])=>(
-            <div key={l} style={{display:'flex',alignItems:'center',gap:5,fontSize:11,color:DIM}}>
-              <div style={{width:7,height:7,borderRadius:'50%',background:c}}/>{l}
-            </div>
-          ))}
-        </div>
-
-        {opsCalView==='list'&&(
-          loading?<Spinner/>:coaches.length===0
-            ?<div style={{textAlign:'center',padding:'60px 20px',color:DIM}}>No coaches yet. Click <strong style={{color:GOLD}}>Coaches</strong> to add your team.</div>
-            :<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(175px,1fr))',gap:10}}>
-              {coaches.map(coach=>{
-                const sess=getSessionsForCoach(coach.id,opsDate)
-                const unavail=!isCoachAvailable(coach.id,opsDate)
-                const tagStyle=coach.role==='group'?{background:'rgba(245,197,24,0.13)',color:GOLD}:coach.role==='solo'?{background:'rgba(79,195,247,0.13)',color:BLUE}:{background:'rgba(129,199,132,0.13)',color:GREEN}
-                const tagText=coach.role==='group'?'GRP':coach.role==='solo'?'1:1':'MIX'
-                return(
-                  <div key={coach.id} style={{background:GRAY,borderRadius:10,border:`1px solid ${unavail?'rgba(255,183,77,0.4)':GRAY2}`,overflow:'hidden',opacity:unavail?0.75:1}}>
-                    <div style={{padding:'9px 12px',borderBottom:`1px solid ${GRAY2}`,display:'flex',alignItems:'center',justifyContent:'space-between',gap:6}}>
-                      <div style={{fontWeight:700,fontSize:13}}>{coach.name}</div>
-                      <div style={{display:'flex',gap:4,alignItems:'center'}}>
-                        {unavail&&<span style={{fontSize:9,fontWeight:800,padding:'2px 6px',borderRadius:4,background:'rgba(255,183,77,0.15)',color:ORANGE}}>OFF</span>}
-                        <span style={{fontSize:9,fontWeight:800,letterSpacing:1,padding:'2px 6px',borderRadius:4,...tagStyle}}>{tagText}</span>
-                      </div>
-                    </div>
-                    <div style={{padding:8}}>
-                      {unavail&&sess.length===0
-                        ?<div style={{fontSize:11,color:ORANGE,textAlign:'center',padding:'12px 0'}}>Unavailable</div>
-                        :sess.length===0
-                          ?<div style={{fontSize:11,color:GRAY3,textAlign:'center',padding:'12px 0'}}>No sessions</div>
-                          :sess.map(s=>(
-                            <div key={s.id} style={{background:GRAY2,borderRadius:6,padding:'7px 9px',marginBottom:5,borderLeft:`3px solid ${s.type==='solo'?BLUE:GOLD}`,position:'relative'}}>
-                              <div style={{fontSize:14,fontWeight:900,lineHeight:1}}>{fmt12(s.time)}</div>
-                              <div style={{fontSize:10,color:DIM,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',maxWidth:'calc(100% - 38px)'}}>{s.type==='solo'?`1:1 · ${s.clientName}`:s.name}</div>
-                              <div style={{position:'absolute',top:4,right:4,display:'flex',gap:3}}>
-                                <button onClick={()=>openEdit(s)} style={{background:'transparent',border:'none',color:GRAY3,cursor:'pointer',fontSize:12,lineHeight:1,padding:0,transition:'color 0.15s'}}
-                                  onMouseEnter={e=>e.target.style.color=GOLD} onMouseLeave={e=>e.target.style.color=GRAY3}>✎</button>
-                                <button onClick={()=>removeSession(s.id)} style={{background:'transparent',border:'none',color:GRAY3,cursor:'pointer',fontSize:14,lineHeight:1,padding:0,transition:'color 0.15s'}}
-                                  onMouseEnter={e=>e.target.style.color=RED} onMouseLeave={e=>e.target.style.color=GRAY3}>×</button>
-                              </div>
-                            </div>
-                          ))
-                      }
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
+        {announcement&&(
+          <div style={{background:'rgba(245,197,24,0.08)',borderBottom:`1px solid rgba(245,197,24,0.2)`,padding:'10px 16px',display:'flex',alignItems:'center',gap:10,justifyContent:'space-between'}}>
+            <div style={{display:'flex',gap:8,alignItems:'center'}}><span>📢</span><span style={{fontSize:12,color:WHITE}}>{announcement.text}</span></div>
+            <button onClick={clearAnnouncement} style={{background:'transparent',border:'none',color:DIM,cursor:'pointer',fontSize:18}}>×</button>
+          </div>
         )}
 
-        {opsCalView==='calendar'&&(
-          <div>
-            <MonthCalendar year={opsCalMonth.year} month={opsCalMonth.month} selectedDay={opsSelDay}
-              onDayClick={d=>setOpsSelDay(d)} getDayDots={dk=>getOpsDayDots(dk)}/>
-            {opsSelDay&&(
-              <div style={{marginTop:16,background:GRAY,borderRadius:10,padding:14,border:`1px solid ${GRAY2}`}}>
-                <div style={{fontSize:12,fontWeight:700,letterSpacing:1,textTransform:'uppercase',color:GOLD,marginBottom:10}}>{fmtLong(opsSelDay)}</div>
-                {getAllSessionsOnDate(opsSelDay).length===0&&getEventsOnDate(dateKey(opsSelDay)).length===0
-                  ?<div style={{fontSize:12,color:DIM,textAlign:'center',padding:'12px 0'}}>No sessions or events</div>
-                  :<>
-                    {getAllSessionsOnDate(opsSelDay).sort((a,b)=>a.time>b.time?1:-1).map(s=>{
-                      const coach=coaches.find(c=>c.id===s.coachId)
-                      return(
-                        <div key={s.id} style={{background:GRAY2,borderRadius:6,padding:'8px 10px',marginBottom:6,borderLeft:`3px solid ${s.type==='solo'?BLUE:GOLD}`,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                          <div>
-                            <div style={{fontSize:13,fontWeight:700}}>{fmt12(s.time)} · {s.type==='solo'?`1:1 · ${s.clientName}`:s.name}</div>
-                            <div style={{fontSize:11,color:DIM,marginTop:2}}>{coach?.name||'Unknown'}</div>
-                          </div>
-                          <div style={{display:'flex',gap:6}}>
-                            <button onClick={()=>openEdit(s)} style={{background:'transparent',border:'none',color:GRAY3,cursor:'pointer',fontSize:14,transition:'color 0.15s'}}
-                              onMouseEnter={e=>e.target.style.color=GOLD} onMouseLeave={e=>e.target.style.color=GRAY3}>✎</button>
-                            <button onClick={()=>removeSession(s.id)} style={{background:'transparent',border:'none',color:GRAY3,cursor:'pointer',fontSize:16,padding:'0 4px',transition:'color 0.15s'}}
-                              onMouseEnter={e=>e.target.style.color=RED} onMouseLeave={e=>e.target.style.color=GRAY3}>×</button>
-                          </div>
-                        </div>
-                      )
-                    })}
-                    {getEventsOnDate(dateKey(opsSelDay)).map(e=>(
-                      <div key={e.id} style={{background:GRAY2,borderRadius:6,padding:'8px 10px',marginBottom:6,borderLeft:`3px solid ${PURPLE}`,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                        <div>
-                          <div style={{fontSize:13,fontWeight:700}}>{fmt12(e.startTime)} · {e.title}</div>
-                          <div style={{fontSize:11,color:DIM,marginTop:2}}>{e.brand==='both'?'Goalz + Shankly':e.brand==='goalz'?'Goalz':'Shankly'}</div>
-                        </div>
-                        <button onClick={()=>removeEvent(e.id)} style={{background:'transparent',border:'none',color:GRAY3,cursor:'pointer',fontSize:16,padding:'0 4px',transition:'color 0.15s'}}
-                          onMouseEnter={e2=>e2.target.style.color=RED} onMouseLeave={e2=>e2.target.style.color=GRAY3}>×</button>
-                      </div>
-                    ))}
-                  </>
-                }
+        <div style={{padding:'16px'}}>
+          <div style={{display:'flex',gap:8,marginBottom:16,alignItems:'center',flexWrap:'wrap'}}>
+            <ToggleBtn active={opsCalView==='list'} onClick={()=>setOpsCalView('list')}>☰ List</ToggleBtn>
+            <ToggleBtn active={opsCalView==='calendar'} onClick={()=>setOpsCalView('calendar')}>📅 Calendar</ToggleBtn>
+            {opsCalView==='list'&&(
+              <div style={{display:'flex',alignItems:'center',gap:8,marginLeft:'auto',flexWrap:'wrap'}}>
+                <NavBtn onClick={()=>{const d=new Date(opsDate);d.setDate(d.getDate()-1);setOpsDate(d)}}>‹</NavBtn>
+                <span style={{fontSize:16,fontWeight:800,textTransform:'uppercase'}}>{fmtLong(opsDate)}</span>
+                {isToday(opsDate)&&<span style={{background:GOLD,color:BLACK,fontSize:9,fontWeight:800,letterSpacing:1.5,textTransform:'uppercase',padding:'2px 8px',borderRadius:20}}>Today</span>}
+                <NavBtn onClick={()=>{const d=new Date(opsDate);d.setDate(d.getDate()+1);setOpsDate(d)}}>›</NavBtn>
+                <Btn outline onClick={()=>setOpsDate(todayMidnight())} style={{fontSize:10,padding:'5px 10px'}}>Today</Btn>
+              </div>
+            )}
+            {opsCalView==='calendar'&&(
+              <div style={{display:'flex',alignItems:'center',gap:8,marginLeft:'auto'}}>
+                <NavBtn onClick={()=>changeMonth(opsCalMonth,-1,setOpsCalMonth)}>‹</NavBtn>
+                <span style={{fontSize:14,fontWeight:800,textTransform:'uppercase'}}>{MONTHS[opsCalMonth.month]} {opsCalMonth.year}</span>
+                <NavBtn onClick={()=>changeMonth(opsCalMonth,1,setOpsCalMonth)}>›</NavBtn>
               </div>
             )}
           </div>
-        )}
-      </div>
 
-      <div style={{position:'fixed',bottom:20,right:20,zIndex:40}}>
-        <Btn gold onClick={()=>setEventOpen(true)} style={{fontSize:12,padding:'10px 16px',borderRadius:30,boxShadow:'0 4px 20px rgba(245,197,24,0.3)'}}>+ Facility Event</Btn>
-      </div>
+          <div style={{display:'flex',gap:14,marginBottom:14,flexWrap:'wrap'}}>
+            {[[GOLD,'Group'],[BLUE,'1-on-1'],[PURPLE,'Facility'],[ORANGE,'Unavailable']].map(([c,l])=>(
+              <div key={l} style={{display:'flex',alignItems:'center',gap:5,fontSize:11,color:DIM}}>
+                <div style={{width:7,height:7,borderRadius:'50%',background:c}}/>{l}
+              </div>
+            ))}
+          </div>
 
-      <SoloModal open={soloOpen} onClose={()=>setSoloOpen(false)} form={soloF} setForm={setSoloF} coaches={eligibleCoaches(['solo','mixed'])} onSave={saveSolo}/>
-      <GroupModal open={groupOpen} onClose={()=>setGroupOpen(false)} form={groupF} setForm={setGroupF} coaches={eligibleCoaches(['group','mixed'])} onSave={saveGroup}/>
-      <EventModal open={eventOpen} onClose={()=>setEventOpen(false)} form={eventF} setForm={setEventF} coaches={coaches} onSave={saveEvent}/>
+          {opsCalView==='list'&&(
+            loading?<Spinner/>:coaches.length===0
+              ?<div style={{textAlign:'center',padding:'60px 20px',color:DIM}}>No coaches yet. Click <strong style={{color:GOLD}}>Coaches</strong> to add your team.</div>
+              :<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(175px,1fr))',gap:10}}>
+                {coaches.map(coach=>{
+                  const sess=getSessionsForCoach(coach.id,opsDate)
+                  const unavail=!isCoachAvailable(coach.id,opsDate)
+                  const tagStyle=coach.role==='group'?{background:'rgba(245,197,24,0.13)',color:GOLD}:coach.role==='solo'?{background:'rgba(79,195,247,0.13)',color:BLUE}:{background:'rgba(129,199,132,0.13)',color:GREEN}
+                  const tagText=coach.role==='group'?'GRP':coach.role==='solo'?'1:1':'MIX'
+                  return(
+                    <div key={coach.id} style={{background:GRAY,borderRadius:10,border:`1px solid ${unavail?'rgba(255,183,77,0.4)':GRAY2}`,overflow:'hidden',opacity:unavail?0.75:1}}>
+                      <div style={{padding:'9px 12px',borderBottom:`1px solid ${GRAY2}`,display:'flex',alignItems:'center',justifyContent:'space-between',gap:6}}>
+                        <div style={{fontWeight:700,fontSize:13,display:'flex',alignItems:'center',gap:5}}>
+                          {coach.name}
+                          {coach.isAdmin&&<span style={{fontSize:8,background:'rgba(245,197,24,0.2)',color:GOLD,padding:'1px 5px',borderRadius:4,fontWeight:800}}>ADMIN</span>}
+                        </div>
+                        <div style={{display:'flex',gap:4,alignItems:'center'}}>
+                          {unavail&&<span style={{fontSize:9,fontWeight:800,padding:'2px 6px',borderRadius:4,background:'rgba(255,183,77,0.15)',color:ORANGE}}>OFF</span>}
+                          <span style={{fontSize:9,fontWeight:800,letterSpacing:1,padding:'2px 6px',borderRadius:4,...tagStyle}}>{tagText}</span>
+                        </div>
+                      </div>
+                      <div style={{padding:8}}>
+                        {unavail&&sess.length===0
+                          ?<div style={{fontSize:11,color:ORANGE,textAlign:'center',padding:'12px 0'}}>Unavailable</div>
+                          :sess.length===0
+                            ?<div style={{fontSize:11,color:GRAY3,textAlign:'center',padding:'12px 0'}}>No sessions</div>
+                            :sess.map(s=>(
+                              <div key={s.id} style={{background:GRAY2,borderRadius:6,padding:'7px 9px',marginBottom:5,borderLeft:`3px solid ${s.type==='solo'?BLUE:GOLD}`,position:'relative'}}>
+                                <div style={{fontSize:14,fontWeight:900,lineHeight:1}}>{fmt12(s.time)}</div>
+                                <div style={{fontSize:10,color:DIM,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',maxWidth:'calc(100% - 38px)'}}>{s.type==='solo'?`1:1 · ${s.clientName}`:s.name}</div>
+                                <div style={{position:'absolute',top:4,right:4,display:'flex',gap:3}}>
+                                  <button onClick={()=>openEdit(s)} style={{background:'transparent',border:'none',color:GRAY3,cursor:'pointer',fontSize:12,lineHeight:1,padding:0,transition:'color 0.15s'}}
+                                    onMouseEnter={e=>e.target.style.color=GOLD} onMouseLeave={e=>e.target.style.color=GRAY3}>✎</button>
+                                  <button onClick={()=>removeSession(s.id)} style={{background:'transparent',border:'none',color:GRAY3,cursor:'pointer',fontSize:14,lineHeight:1,padding:0,transition:'color 0.15s'}}
+                                    onMouseEnter={e=>e.target.style.color=RED} onMouseLeave={e=>e.target.style.color=GRAY3}>×</button>
+                                </div>
+                              </div>
+                            ))
+                        }
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+          )}
 
-      <Modal open={editOpen} onClose={()=>setEditOpen(false)} title="Edit Session">
-        {editSession&&<>
-          <Field label="Time *"><input type="time" style={inp} value={editF.time||''} onChange={e=>setEditF(f=>({...f,time:e.target.value}))}/></Field>
-          <Field label="Duration">
-            <select style={inp} value={editF.dur||'60'} onChange={e=>setEditF(f=>({...f,dur:e.target.value}))}>
-              <option value="30">30 min</option><option value="60">60 min</option><option value="90">90 min</option><option value="120">120 min</option>
-            </select>
-          </Field>
+          {opsCalView==='calendar'&&(
+            <div>
+              <MonthCalendar year={opsCalMonth.year} month={opsCalMonth.month} selectedDay={opsSelDay}
+                onDayClick={d=>setOpsSelDay(d)} getDayDots={dk=>getOpsDayDots(dk)}/>
+              {opsSelDay&&(
+                <div style={{marginTop:16,background:GRAY,borderRadius:10,padding:14,border:`1px solid ${GRAY2}`}}>
+                  <div style={{fontSize:12,fontWeight:700,letterSpacing:1,textTransform:'uppercase',color:GOLD,marginBottom:10}}>{fmtLong(opsSelDay)}</div>
+                  {getAllSessionsOnDate(opsSelDay).length===0&&getEventsOnDate(dateKey(opsSelDay)).length===0
+                    ?<div style={{fontSize:12,color:DIM,textAlign:'center',padding:'12px 0'}}>No sessions or events</div>
+                    :<>
+                      {getAllSessionsOnDate(opsSelDay).sort((a,b)=>a.time>b.time?1:-1).map(s=>{
+                        const coach=coaches.find(c=>c.id===s.coachId)
+                        return(
+                          <div key={s.id} style={{background:GRAY2,borderRadius:6,padding:'8px 10px',marginBottom:6,borderLeft:`3px solid ${s.type==='solo'?BLUE:GOLD}`,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                            <div>
+                              <div style={{fontSize:13,fontWeight:700}}>{fmt12(s.time)} · {s.type==='solo'?`1:1 · ${s.clientName}`:s.name}</div>
+                              <div style={{fontSize:11,color:DIM,marginTop:2}}>{coach?.name||'Unknown'}</div>
+                            </div>
+                            <div style={{display:'flex',gap:6}}>
+                              <button onClick={()=>openEdit(s)} style={{background:'transparent',border:'none',color:GRAY3,cursor:'pointer',fontSize:14,transition:'color 0.15s'}}
+                                onMouseEnter={e=>e.target.style.color=GOLD} onMouseLeave={e=>e.target.style.color=GRAY3}>✎</button>
+                              <button onClick={()=>removeSession(s.id)} style={{background:'transparent',border:'none',color:GRAY3,cursor:'pointer',fontSize:16,padding:'0 4px',transition:'color 0.15s'}}
+                                onMouseEnter={e=>e.target.style.color=RED} onMouseLeave={e=>e.target.style.color=GRAY3}>×</button>
+                            </div>
+                          </div>
+                        )
+                      })}
+                      {getEventsOnDate(dateKey(opsSelDay)).map(e=>(
+                        <div key={e.id} style={{background:GRAY2,borderRadius:6,padding:'8px 10px',marginBottom:6,borderLeft:`3px solid ${PURPLE}`,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                          <div>
+                            <div style={{fontSize:13,fontWeight:700}}>{fmt12(e.startTime)} · {e.title}</div>
+                            <div style={{fontSize:11,color:DIM,marginTop:2}}>{e.brand==='both'?'Goalz + Shankly':e.brand==='goalz'?'Goalz':'Shankly'}</div>
+                          </div>
+                          <button onClick={()=>removeEvent(e.id)} style={{background:'transparent',border:'none',color:GRAY3,cursor:'pointer',fontSize:16,padding:'0 4px',transition:'color 0.15s'}}
+                            onMouseEnter={e2=>e2.target.style.color=RED} onMouseLeave={e2=>e2.target.style.color=GRAY3}>×</button>
+                        </div>
+                      ))}
+                    </>
+                  }
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div style={{position:'fixed',bottom:20,right:20,zIndex:40}}>
+          <Btn gold onClick={()=>setEventOpen(true)} style={{fontSize:12,padding:'10px 16px',borderRadius:30,boxShadow:'0 4px 20px rgba(245,197,24,0.3)'}}>+ Facility Event</Btn>
+        </div>
+
+        <SoloModal open={soloOpen} onClose={()=>setSoloOpen(false)} form={soloF} setForm={setSoloF} coaches={eligibleCoaches(['solo','mixed'])} onSave={saveSolo}/>
+        <GroupModal open={groupOpen} onClose={()=>setGroupOpen(false)} form={groupF} setForm={setGroupF} coaches={eligibleCoaches(['group','mixed'])} onSave={saveGroup}/>
+        <EventModal open={eventOpen} onClose={()=>setEventOpen(false)} form={eventF} setForm={setEventF} coaches={coaches} onSave={saveEvent}/>
+
+        <Modal open={editOpen} onClose={()=>setEditOpen(false)} title="Edit Session">
+          {editSession&&<>
+            <Field label="Time *"><input type="time" style={inp} value={editF.time||''} onChange={e=>setEditF(f=>({...f,time:e.target.value}))}/></Field>
+            <Field label="Duration">
+              <select style={inp} value={editF.dur||'60'} onChange={e=>setEditF(f=>({...f,dur:e.target.value}))}>
+                <option value="30">30 min</option><option value="60">60 min</option><option value="90">90 min</option><option value="120">120 min</option>
+              </select>
+            </Field>
+            <Field label="Coach">
+              <select style={inp} value={editF.coachId||''} onChange={e=>setEditF(f=>({...f,coachId:e.target.value}))}>
+                {coaches.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </Field>
+            {editSession.type==='solo'&&<Field label="Client Name"><input style={inp} value={editF.clientName||''} onChange={e=>setEditF(f=>({...f,clientName:e.target.value}))}/></Field>}
+            {editSession.type==='solo'&&<Field label="Notes"><input style={inp} value={editF.notes||''} onChange={e=>setEditF(f=>({...f,notes:e.target.value}))}/></Field>}
+            <div style={{display:'flex',gap:10,justifyContent:'flex-end',marginTop:20}}>
+              <Btn outline onClick={()=>setEditOpen(false)}>Cancel</Btn>
+              <Btn gold onClick={saveEdit}>Save Changes</Btn>
+            </div>
+          </>}
+        </Modal>
+
+        <Modal open={coachMgmtOpen} onClose={()=>setCoachMgmtOpen(false)} title="Manage Coaches" wide>
+          <div style={{maxHeight:260,overflowY:'auto',marginBottom:16}}>
+            {coaches.length===0
+              ?<div style={{color:DIM,fontSize:13,textAlign:'center',padding:20}}>No coaches yet</div>
+              :coaches.map(c=>(
+                <div key={c.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 12px',background:BLACK,borderRadius:7,marginBottom:6,border:`1px solid ${GRAY2}`,gap:10}}>
+                  <div style={{flex:1}}>
+                    <div style={{fontWeight:700,fontSize:14,display:'flex',alignItems:'center',gap:6}}>
+                      {c.name}
+                      {c.isAdmin&&<span style={{fontSize:9,background:'rgba(245,197,24,0.15)',color:GOLD,padding:'1px 6px',borderRadius:4,fontWeight:800}}>ADMIN</span>}
+                    </div>
+                    <div style={{fontSize:11,color:DIM,marginTop:2}}>{roleLabel(c.role)} · PIN: {c.pin||'—'}</div>
+                  </div>
+                  <div style={{display:'flex',gap:5,flexWrap:'wrap',justifyContent:'flex-end'}}>
+                    <button onClick={()=>toggleAdminStatus(c)}
+                      style={{background:c.isAdmin?'rgba(245,197,24,0.12)':'transparent',border:`1px solid ${c.isAdmin?GOLD:GRAY3}`,color:c.isAdmin?GOLD:DIM,fontSize:10,padding:'3px 8px',borderRadius:5,cursor:'pointer',fontFamily:'inherit'}}>
+                      {c.isAdmin?'Admin ✓':'Make Admin'}
+                    </button>
+                    <button onClick={()=>{setEditCoach(c);setEditCoachPin('')}}
+                      style={{background:'transparent',border:`1px solid ${GRAY3}`,color:WHITE,fontSize:11,padding:'4px 8px',borderRadius:5,cursor:'pointer',fontFamily:'inherit'}}
+                      onMouseEnter={e=>e.currentTarget.style.borderColor=GOLD}
+                      onMouseLeave={e=>e.currentTarget.style.borderColor=GRAY3}>Reset PIN</button>
+                    <Btn danger onClick={()=>removeCoach(c.id)}>Remove</Btn>
+                  </div>
+                </div>
+              ))
+            }
+          </div>
+          {editCoach&&(
+            <div style={{background:GRAY2,borderRadius:8,padding:'14px',marginBottom:16,border:`1px solid ${GOLD}`}}>
+              <div style={{fontSize:12,fontWeight:700,color:GOLD,marginBottom:10}}>Reset PIN for {editCoach.name}</div>
+              <PinPad value={editCoachPin} onChange={setEditCoachPin} maxLen={6}/>
+              <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:12}}>
+                <Btn outline onClick={()=>setEditCoach(null)}>Cancel</Btn>
+                <Btn gold onClick={updateCoachPin}>Save PIN</Btn>
+              </div>
+            </div>
+          )}
+          <div style={{fontSize:10,fontWeight:700,letterSpacing:1.5,textTransform:'uppercase',color:DIM,marginBottom:10,marginTop:4}}>Add New Coach</div>
+          <div style={{borderTop:`1px solid ${GRAY3}`,paddingTop:16}}>
+            <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}}>
+              <input style={{...inp,flex:1,minWidth:130}} placeholder="Coach name" value={newCoach.name} onChange={e=>setNewCoach(n=>({...n,name:e.target.value}))}/>
+              <select style={{...inp,flex:1,minWidth:130}} value={newCoach.role} onChange={e=>setNewCoach(n=>({...n,role:e.target.value}))}>
+                <option value="mixed">Mixed</option>
+                <option value="group">Groups Only</option>
+                <option value="solo">1-on-1s Only</option>
+              </select>
+            </div>
+            <label style={{display:'flex',alignItems:'center',gap:8,fontSize:12,color:DIM,marginBottom:12,cursor:'pointer'}}>
+              <input type="checkbox" checked={newCoach.isAdmin||false} onChange={e=>setNewCoach(n=>({...n,isAdmin:e.target.checked}))}/>
+              Admin access (can access Ops from coach login)
+            </label>
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:11,color:DIM,marginBottom:8}}>Set PIN (min 4 digits)</div>
+              <PinPad value={newCoach.pin} onChange={v=>setNewCoach(n=>({...n,pin:v}))} maxLen={6}/>
+            </div>
+            <Btn gold onClick={addCoach} style={{width:'100%',padding:10}}>Add Coach</Btn>
+          </div>
+          <div style={{display:'flex',justifyContent:'flex-end',marginTop:16}}>
+            <Btn outline onClick={()=>setCoachMgmtOpen(false)}>Done</Btn>
+          </div>
+        </Modal>
+
+        <Modal open={announceOpen} onClose={()=>setAnnounceOpen(false)} title="Announcement">
+          <p style={{fontSize:12,color:DIM,marginBottom:14}}>Coaches see this when they open the app.</p>
+          <Field label="Message"><textarea style={{...inp,minHeight:80,resize:'vertical'}} value={announceText} onChange={e=>setAnnounceText(e.target.value)} placeholder="e.g. Bring extra pinnies today."/></Field>
+          <div style={{display:'flex',gap:10,justifyContent:'flex-end',marginTop:20}}>
+            {announcement&&<Btn danger onClick={()=>{clearAnnouncement();setAnnounceOpen(false)}}>Clear</Btn>}
+            <Btn outline onClick={()=>setAnnounceOpen(false)}>Cancel</Btn>
+            <Btn gold onClick={saveAnnouncement}>Post</Btn>
+          </div>
+        </Modal>
+
+        <Modal open={availOpen} onClose={()=>setAvailOpen(false)} title="Coach Availability" wide>
+          <p style={{fontSize:12,color:DIM,marginBottom:16}}>Mark a coach as unavailable on a specific date.</p>
           <Field label="Coach">
-            <select style={inp} value={editF.coachId||''} onChange={e=>setEditF(f=>({...f,coachId:e.target.value}))}>
+            <select style={inp} value={availCoach} onChange={e=>setAvailCoach(e.target.value)}>
+              <option value="">Select a coach</option>
               {coaches.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </Field>
-          {editSession.type==='solo'&&<Field label="Client Name"><input style={inp} value={editF.clientName||''} onChange={e=>setEditF(f=>({...f,clientName:e.target.value}))}/></Field>}
-          {editSession.type==='solo'&&<Field label="Notes"><input style={inp} value={editF.notes||''} onChange={e=>setEditF(f=>({...f,notes:e.target.value}))}/></Field>}
-          <div style={{display:'flex',gap:10,justifyContent:'flex-end',marginTop:20}}>
-            <Btn outline onClick={()=>setEditOpen(false)}>Cancel</Btn>
-            <Btn gold onClick={saveEdit}>Save Changes</Btn>
-          </div>
-        </>}
-      </Modal>
-
-      <Modal open={coachMgmtOpen} onClose={()=>setCoachMgmtOpen(false)} title="Manage Coaches" wide>
-        <div style={{maxHeight:260,overflowY:'auto',marginBottom:16}}>
-          {coaches.length===0
-            ?<div style={{color:DIM,fontSize:13,textAlign:'center',padding:20}}>No coaches yet</div>
-            :coaches.map(c=>(
-              <div key={c.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 12px',background:BLACK,borderRadius:7,marginBottom:6,border:`1px solid ${GRAY2}`,gap:10}}>
-                <div>
-                  <div style={{fontWeight:700,fontSize:14}}>{c.name}</div>
-                  <div style={{fontSize:11,color:DIM,marginTop:2}}>{roleLabel(c.role)} · PIN: {c.pin||'—'}</div>
-                </div>
-                <div style={{display:'flex',gap:6}}>
-                  <button onClick={()=>{setEditCoach(c);setEditCoachPin('')}}
-                    style={{background:'transparent',border:`1px solid ${GRAY3}`,color:WHITE,fontSize:11,padding:'4px 8px',borderRadius:5,cursor:'pointer',fontFamily:'inherit',transition:'all 0.15s'}}
-                    onMouseEnter={e=>e.currentTarget.style.borderColor=GOLD}
-                    onMouseLeave={e=>e.currentTarget.style.borderColor=GRAY3}>Reset PIN</button>
-                  <Btn danger onClick={()=>removeCoach(c.id)}>Remove</Btn>
-                </div>
-              </div>
-            ))
-          }
-        </div>
-        {editCoach&&(
-          <div style={{background:GRAY2,borderRadius:8,padding:'14px',marginBottom:16,border:`1px solid ${GOLD}`}}>
-            <div style={{fontSize:12,fontWeight:700,color:GOLD,marginBottom:10}}>Reset PIN for {editCoach.name}</div>
-            <PinPad value={editCoachPin} onChange={setEditCoachPin} maxLen={6}/>
-            <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:12}}>
-              <Btn outline onClick={()=>setEditCoach(null)}>Cancel</Btn>
-              <Btn gold onClick={updateCoachPin}>Save PIN</Btn>
+          <Field label="Date"><input type="date" style={inp} value={availDate} onChange={e=>setAvailDate(e.target.value)}/></Field>
+          {availCoach&&availDate&&(
+            <div style={{fontSize:12,color:DIM,marginBottom:14}}>
+              Status: <strong style={{color:!availability[availCoach]?.[availDate]?GREEN:ORANGE}}>{!availability[availCoach]?.[availDate]?'Available':'Unavailable'}</strong>
             </div>
+          )}
+          <div style={{display:'flex',gap:10,justifyContent:'flex-end',marginTop:20}}>
+            <Btn outline onClick={()=>setAvailOpen(false)}>Done</Btn>
+            <Btn gold onClick={toggleAvailability}>Toggle</Btn>
           </div>
-        )}
-        <div style={{fontSize:10,fontWeight:700,letterSpacing:1.5,textTransform:'uppercase',color:DIM,marginBottom:10,marginTop:4}}>Add New Coach</div>
-        <div style={{borderTop:`1px solid ${GRAY3}`,paddingTop:16}}>
-          <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}}>
-            <input style={{...inp,flex:1,minWidth:130}} placeholder="Coach name" value={newCoach.name}
-              onChange={e=>setNewCoach(n=>({...n,name:e.target.value}))}/>
-            <select style={{...inp,flex:1,minWidth:140}} value={newCoach.role} onChange={e=>setNewCoach(n=>({...n,role:e.target.value}))}>
-              <option value="mixed">Mixed</option>
-              <option value="group">Groups Only</option>
-              <option value="solo">1-on-1s Only</option>
-            </select>
+          <div style={{marginTop:20,borderTop:`1px solid ${GRAY3}`,paddingTop:16}}>
+            <div style={{fontSize:10,fontWeight:700,letterSpacing:1.5,textTransform:'uppercase',color:DIM,marginBottom:10}}>Currently Unavailable</div>
+            {Object.entries(availability).flatMap(([cId,dates])=>
+              Object.entries(dates).filter(([,v])=>v).map(([dk])=>{
+                const coach=coaches.find(c=>c.id===cId)
+                return(
+                  <div key={cId+dk} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 10px',background:GRAY2,borderRadius:6,marginBottom:5}}>
+                    <span style={{fontSize:12}}>{coach?.name||'Unknown'} · {dk}</span>
+                    <button onClick={async()=>{await remove(ref(db,`availability/${cId}/${dk}`));setToast('Removed')}}
+                      style={{background:'transparent',border:'none',color:DIM,cursor:'pointer',fontSize:14}}>×</button>
+                  </div>
+                )
+              })
+            )}
           </div>
-          <div style={{marginBottom:14}}>
-            <div style={{fontSize:11,color:DIM,marginBottom:8}}>Set PIN (min 4 digits)</div>
-            <PinPad value={newCoach.pin} onChange={v=>setNewCoach(n=>({...n,pin:v}))} maxLen={6}/>
-          </div>
-          <Btn gold onClick={addCoach} style={{width:'100%',padding:10}}>Add Coach</Btn>
-        </div>
-        <div style={{display:'flex',justifyContent:'flex-end',marginTop:16}}>
-          <Btn outline onClick={()=>setCoachMgmtOpen(false)}>Done</Btn>
-        </div>
-      </Modal>
+        </Modal>
 
-      <Modal open={announceOpen} onClose={()=>setAnnounceOpen(false)} title="Announcement">
-        <p style={{fontSize:12,color:DIM,marginBottom:14}}>Coaches see this when they open the app.</p>
-        <Field label="Message">
-          <textarea style={{...inp,minHeight:80,resize:'vertical'}} value={announceText} onChange={e=>setAnnounceText(e.target.value)} placeholder="e.g. Bring extra pinnies today."/>
-        </Field>
-        <div style={{display:'flex',gap:10,justifyContent:'flex-end',marginTop:20}}>
-          {announcement&&<Btn danger onClick={()=>{clearAnnouncement();setAnnounceOpen(false)}}>Clear</Btn>}
-          <Btn outline onClick={()=>setAnnounceOpen(false)}>Cancel</Btn>
-          <Btn gold onClick={saveAnnouncement}>Post</Btn>
-        </div>
-      </Modal>
-
-      <Modal open={availOpen} onClose={()=>setAvailOpen(false)} title="Coach Availability" wide>
-        <p style={{fontSize:12,color:DIM,marginBottom:16}}>Mark a coach as unavailable on a specific date.</p>
-        <Field label="Coach">
-          <select style={inp} value={availCoach} onChange={e=>setAvailCoach(e.target.value)}>
-            <option value="">Select a coach</option>
-            {coaches.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-        </Field>
-        <Field label="Date"><input type="date" style={inp} value={availDate} onChange={e=>setAvailDate(e.target.value)}/></Field>
-        {availCoach&&availDate&&(
-          <div style={{fontSize:12,color:DIM,marginBottom:14}}>
-            Status: <strong style={{color:!availability[availCoach]?.[availDate]?GREEN:ORANGE}}>{!availability[availCoach]?.[availDate]?'Available':'Unavailable'}</strong>
-          </div>
-        )}
-        <div style={{display:'flex',gap:10,justifyContent:'flex-end',marginTop:20}}>
-          <Btn outline onClick={()=>setAvailOpen(false)}>Done</Btn>
-          <Btn gold onClick={toggleAvailability}>Toggle</Btn>
-        </div>
-        <div style={{marginTop:20,borderTop:`1px solid ${GRAY3}`,paddingTop:16}}>
-          <div style={{fontSize:10,fontWeight:700,letterSpacing:1.5,textTransform:'uppercase',color:DIM,marginBottom:10}}>Currently Unavailable</div>
-          {Object.entries(availability).flatMap(([cId,dates])=>
-            Object.entries(dates).filter(([,v])=>v).map(([dk])=>{
-              const coach=coaches.find(c=>c.id===cId)
+        <Modal open={statsOpen} onClose={()=>setStatsOpen(false)} title="Session Stats" wide>
+          <div style={{fontSize:10,fontWeight:700,letterSpacing:1.5,textTransform:'uppercase',color:DIM,marginBottom:12}}>1-on-1 Assignments per Coach</div>
+          {coaches.length===0?<div style={{fontSize:12,color:DIM,textAlign:'center',padding:20}}>No coaches yet</div>
+            :coaches.map(c=>{
+              const summerCount=getSoloCount(c.id,'summer'),weekCount=getSoloCount(c.id,'week')
+              const maxSummer=Math.max(...coaches.map(x=>getSoloCount(x.id,'summer')),1)
               return(
-                <div key={cId+dk} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 10px',background:GRAY2,borderRadius:6,marginBottom:5}}>
-                  <span style={{fontSize:12}}>{coach?.name||'Unknown'} · {dk}</span>
-                  <button onClick={async()=>{await remove(ref(db,`availability/${cId}/${dk}`));setToast('Removed')}}
-                    style={{background:'transparent',border:'none',color:DIM,cursor:'pointer',fontSize:14}}>×</button>
+                <div key={c.id} style={{marginBottom:14}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:5}}>
+                    <span style={{fontSize:13,fontWeight:600}}>{c.name}</span>
+                    <div style={{display:'flex',gap:12}}>
+                      <span style={{fontSize:11,color:DIM}}>Week: <strong style={{color:WHITE}}>{weekCount}</strong></span>
+                      <span style={{fontSize:11,color:DIM}}>Total: <strong style={{color:GOLD}}>{summerCount}</strong></span>
+                    </div>
+                  </div>
+                  <div style={{background:GRAY2,borderRadius:4,height:6,overflow:'hidden'}}>
+                    <div style={{background:GOLD,height:'100%',borderRadius:4,width:`${(summerCount/maxSummer)*100}%`,transition:'width 0.3s'}}/>
+                  </div>
                 </div>
               )
             })
-          )}
-        </div>
-      </Modal>
+          }
+          <div style={{display:'flex',justifyContent:'flex-end',marginTop:18}}><Btn outline onClick={()=>setStatsOpen(false)}>Close</Btn></div>
+        </Modal>
 
-      <Modal open={statsOpen} onClose={()=>setStatsOpen(false)} title="Session Stats" wide>
-        <div style={{fontSize:10,fontWeight:700,letterSpacing:1.5,textTransform:'uppercase',color:DIM,marginBottom:12}}>1-on-1 Assignments per Coach</div>
-        {coaches.length===0
-          ?<div style={{fontSize:12,color:DIM,textAlign:'center',padding:20}}>No coaches yet</div>
-          :coaches.map(c=>{
-            const summerCount=getSoloCount(c.id,'summer')
-            const weekCount=getSoloCount(c.id,'week')
-            const maxSummer=Math.max(...coaches.map(x=>getSoloCount(x.id,'summer')),1)
-            return(
-              <div key={c.id} style={{marginBottom:14}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:5}}>
-                  <span style={{fontSize:13,fontWeight:600}}>{c.name}</span>
-                  <div style={{display:'flex',gap:12}}>
-                    <span style={{fontSize:11,color:DIM}}>Week: <strong style={{color:WHITE}}>{weekCount}</strong></span>
-                    <span style={{fontSize:11,color:DIM}}>Total: <strong style={{color:GOLD}}>{summerCount}</strong></span>
-                  </div>
+        <Modal open={timeOffOpen} onClose={()=>setTimeOffOpen(false)} title="Time Off Requests" wide>
+          {timeOffRequests.length===0
+            ?<div style={{fontSize:13,color:DIM,textAlign:'center',padding:'20px 0'}}>No time off requests</div>
+            :['pending','approved','denied'].map(status=>{
+              const reqs=timeOffRequests.filter(r=>r.status===status)
+              if(reqs.length===0)return null
+              const statusColor=status==='pending'?ORANGE:status==='approved'?GREEN:RED
+              return(
+                <div key={status} style={{marginBottom:20}}>
+                  <div style={{fontSize:10,fontWeight:700,letterSpacing:1.5,textTransform:'uppercase',color:statusColor,marginBottom:10}}>{status.charAt(0).toUpperCase()+status.slice(1)}</div>
+                  {reqs.map(r=>(
+                    <div key={r.id} style={{background:GRAY2,borderRadius:8,padding:'12px 14px',marginBottom:8,borderLeft:`3px solid ${statusColor}`}}>
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:10}}>
+                        <div style={{flex:1}}>
+                          <div style={{fontWeight:700,fontSize:14,marginBottom:3}}>{r.coachName}</div>
+                          <div style={{fontSize:12,color:DIM,marginBottom:2}}>{r.startDate} → {r.endDate}</div>
+                          {r.reason&&<div style={{fontSize:12,color:WHITE,marginTop:4}}>"{r.reason}"</div>}
+                        </div>
+                        <div style={{display:'flex',gap:6,flexShrink:0}}>
+                          {status==='pending'&&<>
+                            <Btn gold onClick={()=>approveTimeOff(r)} style={{fontSize:11,padding:'5px 10px'}}>Approve</Btn>
+                            <Btn danger onClick={()=>denyTimeOff(r.id)} style={{fontSize:11,padding:'5px 10px'}}>Deny</Btn>
+                          </>}
+                          <button onClick={()=>deleteTimeOffRequest(r.id)} style={{background:'transparent',border:'none',color:GRAY3,cursor:'pointer',fontSize:16}}
+                            onMouseEnter={e=>e.target.style.color=RED} onMouseLeave={e=>e.target.style.color=GRAY3}>×</button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <div style={{background:GRAY2,borderRadius:4,height:6,overflow:'hidden'}}>
-                  <div style={{background:GOLD,height:'100%',borderRadius:4,width:`${(summerCount/maxSummer)*100}%`,transition:'width 0.3s'}}/>
-                </div>
-              </div>
-            )
-          })
-        }
-        <div style={{display:'flex',justifyContent:'flex-end',marginTop:18}}>
-          <Btn outline onClick={()=>setStatsOpen(false)}>Close</Btn>
-        </div>
-      </Modal>
+              )
+            })
+          }
+          <div style={{display:'flex',justifyContent:'flex-end',marginTop:16}}><Btn outline onClick={()=>setTimeOffOpen(false)}>Close</Btn></div>
+        </Modal>
 
-      <Toast msg={toast}/>
-    </div>
-  )
+        <Toast msg={toast}/>
+      </div>
+    )
+  }
 
-  // COACH VIEW
   if(view==='coach'&&loggedInCoach){
-    const next7=getNext7()
+    const TABS=['schedule','facility','summary','chat','time off']
     return(
       <div style={{...PAGE,display:'flex',flexDirection:'column'}}>
         <div style={{...HDR,flexDirection:'column',alignItems:'stretch',gap:8}}>
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-            <div>
+            <div style={{display:'flex',alignItems:'center',gap:10}}>
               <span style={{fontSize:20,fontWeight:900,letterSpacing:3,textTransform:'uppercase',color:GOLD}}>SHANKLY</span>
+              {loggedInCoach.isAdmin&&(
+                <button onClick={()=>setView('ops')} style={{background:'rgba(245,197,24,0.12)',border:`1px solid rgba(245,197,24,0.4)`,color:GOLD,fontSize:11,fontWeight:700,padding:'4px 10px',borderRadius:6,cursor:'pointer',fontFamily:'inherit'}}>
+                  ⚡ Ops
+                </button>
+              )}
             </div>
             <div style={{display:'flex',gap:8,alignItems:'center'}}>
-              <span style={{fontSize:12,color:DIM}}>{loggedInCoach.name}</span>
-              <button onClick={logout} style={{background:'transparent',border:`1px solid ${GRAY3}`,color:DIM,fontSize:11,padding:'5px 10px',borderRadius:6,cursor:'pointer',fontFamily:'inherit',transition:'all 0.15s'}}
+              <span style={{fontSize:11,color:DIM}}>{loggedInCoach.name}</span>
+              <button onClick={logout} style={{background:'transparent',border:`1px solid ${GRAY3}`,color:DIM,fontSize:11,padding:'5px 10px',borderRadius:6,cursor:'pointer',fontFamily:'inherit'}}
                 onMouseEnter={e=>e.currentTarget.style.borderColor=RED}
                 onMouseLeave={e=>e.currentTarget.style.borderColor=GRAY3}>Log Out</button>
             </div>
           </div>
+
           {announcement&&(
             <div style={{background:'rgba(245,197,24,0.08)',border:`1px solid rgba(245,197,24,0.2)`,borderRadius:8,padding:'8px 12px',display:'flex',gap:8,alignItems:'center'}}>
-              <span>📢</span>
-              <span style={{fontSize:12,color:WHITE}}>{announcement.text}</span>
+              <span>📢</span><span style={{fontSize:12,color:WHITE}}>{announcement.text}</span>
             </div>
           )}
-          <div style={{display:'flex',gap:6}}>
-            {['schedule','facility','chat'].map(t=>(
+
+          <div style={{display:'flex',gap:5,overflowX:'auto',paddingBottom:2}}>
+            {TABS.map(t=>(
               <button key={t} onClick={()=>setCoachTab(t)}
-                style={{background:coachTab===t?GOLD:GRAY2,border:`1px solid ${coachTab===t?GOLD:GRAY3}`,color:coachTab===t?BLACK:WHITE,fontSize:12,fontWeight:700,padding:'7px 14px',borderRadius:20,cursor:'pointer',fontFamily:'inherit',transition:'all 0.15s',flex:1,textTransform:'capitalize'}}>
+                style={{background:coachTab===t?GOLD:GRAY2,border:`1px solid ${coachTab===t?GOLD:GRAY3}`,color:coachTab===t?BLACK:WHITE,fontSize:11,fontWeight:700,padding:'7px 10px',borderRadius:20,cursor:'pointer',fontFamily:'inherit',transition:'all 0.15s',whiteSpace:'nowrap',textTransform:'capitalize',flexShrink:0}}>
                 {t}
               </button>
             ))}
           </div>
+
           {coachTab==='schedule'&&(
             <div style={{display:'flex',gap:6}}>
               <ToggleBtn active={coachCalView==='list'} onClick={()=>setCoachCalView('list')}>☰ List</ToggleBtn>
@@ -901,7 +968,7 @@ export default function App(){
         {coachTab==='schedule'&&(
           <div style={{flex:1,padding:'16px',overflowY:'auto'}}>
             {loading?<Spinner/>:coachCalView==='list'
-              ?next7.map(day=>{
+              ?getNext7().map(day=>{
                 const sess=getSessionsForCoach(loggedInCoach.id,day)
                 const today=isToday(day)
                 const unavail=!isCoachAvailable(loggedInCoach.id,day)
@@ -964,6 +1031,13 @@ export default function App(){
               <span style={{fontSize:16,fontWeight:900,textTransform:'uppercase'}}>{MONTHS[facCalMonth.month]} {facCalMonth.year}</span>
               <NavBtn onClick={()=>changeMonth(facCalMonth,1,setFacCalMonth)}>›</NavBtn>
             </div>
+            <div style={{display:'flex',gap:14,marginBottom:12,justifyContent:'center',flexWrap:'wrap'}}>
+              {[[PURPLE,'Event'],[GOLD,'Goalz'],[GREEN,'Shankly']].map(([c,l])=>(
+                <div key={l} style={{display:'flex',alignItems:'center',gap:5,fontSize:11,color:DIM}}>
+                  <div style={{width:7,height:7,borderRadius:'50%',background:c}}/>{l}
+                </div>
+              ))}
+            </div>
             <MonthCalendar year={facCalMonth.year} month={facCalMonth.month} selectedDay={facSelDay}
               onDayClick={d=>setFacSelDay(d)}
               getDayDots={dk=>getEventsOnDate(dk).map(e=>e.brand==='goalz'?GOLD:e.brand==='shankly'?GREEN:PURPLE)}/>
@@ -1001,6 +1075,69 @@ export default function App(){
           </div>
         )}
 
+        {coachTab==='summary'&&(()=>{
+          const allSess=getAllSessionsOnDate(summaryDate).sort((a,b)=>a.time>b.time?1:-1)
+          const allEvts=getEventsOnDate(dateKey(summaryDate)).sort((a,b)=>a.startTime>b.startTime?1:-1)
+          return(
+            <div style={{flex:1,padding:'16px',overflowY:'auto'}}>
+              <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:20,flexWrap:'wrap'}}>
+                <NavBtn onClick={()=>{const d=new Date(summaryDate);d.setDate(d.getDate()-1);setSummaryDate(d)}}>‹</NavBtn>
+                <span style={{fontSize:17,fontWeight:900,textTransform:'uppercase'}}>{fmtLong(summaryDate)}</span>
+                {isToday(summaryDate)&&<span style={{background:GOLD,color:BLACK,fontSize:9,fontWeight:800,letterSpacing:1.5,textTransform:'uppercase',padding:'2px 8px',borderRadius:20}}>Today</span>}
+                <NavBtn onClick={()=>{const d=new Date(summaryDate);d.setDate(d.getDate()+1);setSummaryDate(d)}}>›</NavBtn>
+                <Btn outline onClick={()=>setSummaryDate(todayMidnight())} style={{fontSize:10,padding:'5px 10px'}}>Today</Btn>
+              </div>
+              {loading?<Spinner/>:<>
+                <div style={{display:'flex',gap:10,marginBottom:20,flexWrap:'wrap'}}>
+                  <StatPill label="Total" value={allSess.length} color={GOLD}/>
+                  <StatPill label="1-on-1s" value={allSess.filter(s=>s.type==='solo').length} color={BLUE}/>
+                  <StatPill label="Groups" value={allSess.filter(s=>s.type==='group').length} color={GREEN}/>
+                  <StatPill label="Coaches" value={[...new Set(allSess.map(s=>s.coachId))].length} color={PURPLE}/>
+                </div>
+                {allSess.length===0&&allEvts.length===0
+                  ?<div style={{textAlign:'center',padding:'60px 20px',color:DIM}}>No sessions or events</div>
+                  :<>
+                    {allSess.length>0&&(
+                      <div style={{marginBottom:24}}>
+                        <div style={{fontSize:10,fontWeight:800,letterSpacing:2,textTransform:'uppercase',color:DIM,marginBottom:12}}>All Sessions</div>
+                        {allSess.map(s=>{
+                          const coach=coaches.find(c=>c.id===s.coachId)
+                          return(
+                            <div key={s.id} style={{background:GRAY,borderRadius:9,padding:'12px 14px',marginBottom:8,borderLeft:`3px solid ${s.type==='solo'?BLUE:GOLD}`,display:'flex',alignItems:'center',gap:14}}>
+                              <div style={{minWidth:68}}>
+                                <div style={{fontSize:18,fontWeight:900,lineHeight:1}}>{fmt12(s.time)}</div>
+                                <div style={{fontSize:10,color:DIM,marginTop:2}}>{s.duration}min</div>
+                              </div>
+                              <div style={{flex:1}}>
+                                <div style={{fontSize:14,fontWeight:700}}>{s.type==='solo'?`1-on-1 · ${s.clientName}`:s.name}</div>
+                                <div style={{fontSize:11,color:DIM,marginTop:2}}>{coach?.name||'Unknown'}</div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                    {allEvts.length>0&&(
+                      <div>
+                        <div style={{fontSize:10,fontWeight:800,letterSpacing:2,textTransform:'uppercase',color:DIM,marginBottom:12}}>Facility Events</div>
+                        {allEvts.map(e=>{
+                          const bc=e.brand==='goalz'?GOLD:e.brand==='shankly'?GREEN:PURPLE
+                          return(
+                            <div key={e.id} style={{background:GRAY,borderRadius:9,padding:'12px 14px',marginBottom:8,borderLeft:`3px solid ${bc}`}}>
+                              <div style={{fontSize:14,fontWeight:700}}>{e.title}</div>
+                              <div style={{fontSize:11,color:DIM,marginTop:2}}>{fmt12(e.startTime)}{e.endTime?' – '+fmt12(e.endTime):''}</div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </>
+                }
+              </>}
+            </div>
+          )
+        })()}
+
         {coachTab==='chat'&&(
           <div style={{flex:1,display:'flex',flexDirection:'column'}}>
             <div style={{flex:1,padding:'16px',overflowY:'auto',display:'flex',flexDirection:'column',gap:10}}>
@@ -1019,6 +1156,7 @@ export default function App(){
                   )
                 })
               }
+              <div ref={chatEndRef}/>
             </div>
             <div style={{padding:'12px 16px',borderTop:`1px solid ${GRAY2}`,display:'flex',gap:10,alignItems:'center',background:GRAY}}>
               <input style={{...inp,flex:1}} placeholder="Type a message..." value={chatMsg}
@@ -1029,183 +1167,41 @@ export default function App(){
           </div>
         )}
 
-        <Toast msg={toast}/>
-      </div>
-    )
-  }
-
-  // DAILY SUMMARY
-  if(view==='summary'){
-    const allSess=getAllSessionsOnDate(summaryDate).sort((a,b)=>a.time>b.time?1:-1)
-    const allEvts=getEventsOnDate(dateKey(summaryDate)).sort((a,b)=>a.startTime>b.startTime?1:-1)
-    return(
-      <div style={PAGE}>
-        <div style={HDR}>
-          <div style={{display:'flex',alignItems:'baseline',gap:8}}>
-            <span style={{fontSize:20,fontWeight:900,letterSpacing:3,textTransform:'uppercase',color:GOLD}}>SHANKLY</span>
-            <span style={{fontSize:10,letterSpacing:2,textTransform:'uppercase',color:DIM}}>Daily Summary</span>
-          </div>
-          <HomeBtn onClick={()=>setView('landing')}/>
-        </div>
-        <div style={{padding:'16px'}}>
-          <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:20,flexWrap:'wrap'}}>
-            <NavBtn onClick={()=>{const d=new Date(summaryDate);d.setDate(d.getDate()-1);setSummaryDate(d)}}>‹</NavBtn>
-            <span style={{fontSize:18,fontWeight:900,textTransform:'uppercase'}}>{fmtLong(summaryDate)}</span>
-            {isToday(summaryDate)&&<span style={{background:GOLD,color:BLACK,fontSize:9,fontWeight:800,letterSpacing:1.5,textTransform:'uppercase',padding:'2px 8px',borderRadius:20}}>Today</span>}
-            <NavBtn onClick={()=>{const d=new Date(summaryDate);d.setDate(d.getDate()+1);setSummaryDate(d)}}>›</NavBtn>
-            <Btn outline onClick={()=>setSummaryDate(todayMidnight())} style={{fontSize:10,padding:'5px 10px'}}>Today</Btn>
-          </div>
-          {loading?<Spinner/>:<>
-            <div style={{display:'flex',gap:10,marginBottom:20,flexWrap:'wrap'}}>
-              <StatPill label="Total" value={allSess.length} color={GOLD}/>
-              <StatPill label="1-on-1s" value={allSess.filter(s=>s.type==='solo').length} color={BLUE}/>
-              <StatPill label="Groups" value={allSess.filter(s=>s.type==='group').length} color={GREEN}/>
-              <StatPill label="Coaches" value={[...new Set(allSess.map(s=>s.coachId))].length} color={PURPLE}/>
+        {coachTab==='time off'&&(
+          <div style={{flex:1,padding:'16px',overflowY:'auto'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+              <div style={{fontSize:14,fontWeight:700}}>My Time Off Requests</div>
+              <Btn gold onClick={()=>setTimeOffReqOpen(true)} style={{fontSize:12,padding:'8px 14px'}}>+ New Request</Btn>
             </div>
-            {allSess.length===0&&allEvts.length===0
-              ?<div style={{textAlign:'center',padding:'60px 20px',color:DIM}}>No sessions or events today</div>
-              :<>
-                {allSess.length>0&&(
-                  <div style={{marginBottom:24}}>
-                    <div style={{fontSize:10,fontWeight:800,letterSpacing:2,textTransform:'uppercase',color:DIM,marginBottom:12}}>Sessions</div>
-                    {allSess.map(s=>{
-                      const coach=coaches.find(c=>c.id===s.coachId)
-                      return(
-                        <div key={s.id} style={{background:GRAY,borderRadius:9,padding:'12px 14px',marginBottom:8,borderLeft:`3px solid ${s.type==='solo'?BLUE:GOLD}`,display:'flex',alignItems:'center',gap:14}}>
-                          <div style={{minWidth:68}}>
-                            <div style={{fontSize:18,fontWeight:900,lineHeight:1}}>{fmt12(s.time)}</div>
-                            <div style={{fontSize:10,color:DIM,marginTop:2}}>{s.duration}min</div>
-                          </div>
-                          <div style={{flex:1}}>
-                            <div style={{fontSize:14,fontWeight:700}}>{s.type==='solo'?`1-on-1 · ${s.clientName}`:s.name}</div>
-                            <div style={{fontSize:11,color:DIM,marginTop:2}}>{coach?.name||'Unknown'}{s.type==='solo'&&s.notes?' · '+s.notes:''}</div>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-                {allEvts.length>0&&(
-                  <div style={{marginBottom:24}}>
-                    <div style={{fontSize:10,fontWeight:800,letterSpacing:2,textTransform:'uppercase',color:DIM,marginBottom:12}}>Facility Events</div>
-                    {allEvts.map(e=>{
-                      const bc=e.brand==='goalz'?GOLD:e.brand==='shankly'?GREEN:PURPLE
-                      return(
-                        <div key={e.id} style={{background:GRAY,borderRadius:9,padding:'12px 14px',marginBottom:8,borderLeft:`3px solid ${bc}`}}>
-                          <div style={{fontSize:14,fontWeight:700}}>{e.title}</div>
-                          <div style={{fontSize:11,color:DIM,marginTop:2}}>{fmt12(e.startTime)}{e.endTime?' – '+fmt12(e.endTime):''}</div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-                <div>
-                  <div style={{fontSize:10,fontWeight:800,letterSpacing:2,textTransform:'uppercase',color:DIM,marginBottom:12}}>Coach Breakdown</div>
-                  {coaches.map(coach=>{
-                    const sess=getSessionsForCoach(coach.id,summaryDate)
-                    const unavail=!isCoachAvailable(coach.id,summaryDate)
-                    if(sess.length===0&&!unavail)return null
-                    return(
-                      <div key={coach.id} style={{background:GRAY,borderRadius:8,padding:'10px 14px',marginBottom:8,border:`1px solid ${GRAY2}`}}>
-                        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:sess.length>0?8:0}}>
-                          <span style={{fontWeight:700,fontSize:13}}>{coach.name}</span>
-                          <div style={{display:'flex',gap:6,alignItems:'center'}}>
-                            {unavail&&<span style={{fontSize:9,background:'rgba(255,183,77,0.15)',color:ORANGE,padding:'2px 6px',borderRadius:10,fontWeight:700}}>OFF</span>}
-                            <span style={{fontSize:11,color:DIM}}>{sess.length} session{sess.length!==1?'s':''}</span>
-                          </div>
-                        </div>
-                        {sess.map(s=>(
-                          <div key={s.id} style={{fontSize:12,color:DIM,paddingLeft:8,borderLeft:`2px solid ${s.type==='solo'?BLUE:GOLD}`,marginBottom:4}}>
-                            {fmt12(s.time)} · {s.type==='solo'?`1:1 ${s.clientName}`:s.name}
-                          </div>
-                        ))}
-                      </div>
-                    )
-                  })}
-                </div>
-              </>
-            }
-          </>}
-        </div>
-        <Toast msg={toast}/>
-      </div>
-    )
-  }
-
-  // FACILITY
-  if(view==='facility'){
-    const selDk=facSelDay?dateKey(facSelDay):null
-    const selEvents=selDk?getEventsOnDate(selDk):[]
-    return(
-      <div style={PAGE}>
-        <div style={HDR}>
-          <div>
-            <span style={{fontSize:20,fontWeight:900,letterSpacing:3,textTransform:'uppercase',color:GOLD}}>SHANKLY</span>
-            <span style={{fontSize:10,letterSpacing:2,textTransform:'uppercase',color:DIM,marginLeft:8}}>Facility</span>
-          </div>
-          <HomeBtn onClick={()=>setView('landing')}/>
-        </div>
-        <div style={{padding:'16px'}}>
-          <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16,justifyContent:'center'}}>
-            <NavBtn onClick={()=>changeMonth(facCalMonth,-1,setFacCalMonth)}>‹</NavBtn>
-            <span style={{fontSize:18,fontWeight:900,textTransform:'uppercase'}}>{MONTHS[facCalMonth.month]} {facCalMonth.year}</span>
-            <NavBtn onClick={()=>changeMonth(facCalMonth,1,setFacCalMonth)}>›</NavBtn>
-          </div>
-          <div style={{display:'flex',gap:14,marginBottom:14,justifyContent:'center',flexWrap:'wrap'}}>
-            {[[PURPLE,'Event'],[GOLD,'Goalz'],[GREEN,'Shankly']].map(([c,l])=>(
-              <div key={l} style={{display:'flex',alignItems:'center',gap:5,fontSize:11,color:DIM}}>
-                <div style={{width:7,height:7,borderRadius:'50%',background:c}}/>{l}
-              </div>
-            ))}
-          </div>
-          <MonthCalendar year={facCalMonth.year} month={facCalMonth.month} selectedDay={facSelDay}
-            onDayClick={d=>setFacSelDay(d)}
-            getDayDots={dk=>getEventsOnDate(dk).map(e=>e.brand==='goalz'?GOLD:e.brand==='shankly'?GREEN:PURPLE)}/>
-          {facSelDay&&(
-            <div style={{marginTop:16,background:GRAY,borderRadius:12,padding:16,border:`1px solid ${GRAY2}`}}>
-              <div style={{fontSize:12,fontWeight:800,letterSpacing:1.5,textTransform:'uppercase',color:GOLD,marginBottom:12}}>{fmtLong(facSelDay)}</div>
-              {selEvents.length===0
-                ?<div style={{fontSize:13,color:DIM,textAlign:'center',padding:'16px 0'}}>No events</div>
-                :selEvents.sort((a,b)=>a.startTime>b.startTime?1:-1).map(e=>{
-                  const bc=e.brand==='goalz'?GOLD:e.brand==='shankly'?GREEN:PURPLE
-                  const bl=e.brand==='both'?'Goalz + Shankly':e.brand==='goalz'?'Goalz':'Shankly'
-                  const involvedCoaches=coaches.filter(c=>e.coachIds&&e.coachIds.includes(c.id))
-                  return(
-                    <div key={e.id} style={{background:GRAY2,borderRadius:8,padding:'12px 14px',marginBottom:10,borderLeft:`3px solid ${bc}`}}>
-                      <div style={{fontSize:15,fontWeight:700,marginBottom:4}}>{e.title}</div>
-                      <div style={{fontSize:12,color:DIM,marginBottom:4}}>{fmt12(e.startTime)}{e.endTime?' – '+fmt12(e.endTime):''}</div>
-                      <span style={{fontSize:10,fontWeight:700,letterSpacing:1,padding:'2px 8px',borderRadius:20,background:`${bc}22`,color:bc}}>{bl}</span>
-                      {involvedCoaches.length>0&&(
-                        <div style={{marginTop:8,display:'flex',flexWrap:'wrap',gap:5}}>
-                          {involvedCoaches.map(c=><span key={c.id} style={{fontSize:10,background:GRAY3,color:WHITE,padding:'2px 8px',borderRadius:20}}>{c.name}</span>)}
-                        </div>
-                      )}
-                    </div>
-                  )
-                })
-              }
-            </div>
-          )}
-          <div style={{marginTop:20}}>
-            <div style={{fontSize:11,fontWeight:800,letterSpacing:2,textTransform:'uppercase',color:DIM,marginBottom:12}}>Upcoming Events</div>
-            {events.length===0
-              ?<div style={{fontSize:13,color:DIM,textAlign:'center',padding:'20px 0'}}>No events yet</div>
-              :events.filter(e=>new Date(e.date+'T00:00:00')>=todayMidnight()).sort((a,b)=>a.date>b.date?1:-1).slice(0,10).map(e=>{
-                const bc=e.brand==='goalz'?GOLD:e.brand==='shankly'?GREEN:PURPLE
-                const d=new Date(e.date+'T00:00:00')
+            {timeOffRequests.filter(r=>r.coachId===loggedInCoach.id).length===0
+              ?<div style={{textAlign:'center',padding:'40px 20px',color:DIM,fontSize:13}}>No requests yet.</div>
+              :timeOffRequests.filter(r=>r.coachId===loggedInCoach.id).sort((a,b)=>b.submittedAt-a.submittedAt).map(r=>{
+                const statusColor=r.status==='pending'?ORANGE:r.status==='approved'?GREEN:RED
+                const statusLabel=r.status==='pending'?'Pending':r.status==='approved'?'Approved':'Denied'
                 return(
-                  <div key={e.id} onClick={()=>{setFacSelDay(d);setFacCalMonth({year:d.getFullYear(),month:d.getMonth()})}}
-                    style={{background:GRAY,borderRadius:8,padding:'11px 14px',marginBottom:8,borderLeft:`3px solid ${bc}`,cursor:'pointer',transition:'background 0.15s'}}
-                    onMouseEnter={e2=>e2.currentTarget.style.background=GRAY2}
-                    onMouseLeave={e2=>e2.currentTarget.style.background=GRAY}>
-                    <div style={{fontSize:13,fontWeight:700}}>{e.title}</div>
-                    <div style={{fontSize:11,color:DIM,marginTop:2}}>{fmtLong(d)} · {fmt12(e.startTime)}</div>
+                  <div key={r.id} style={{background:GRAY,borderRadius:9,padding:'14px 16px',marginBottom:10,border:`1px solid ${GRAY2}`,borderLeft:`3px solid ${statusColor}`}}>
+                    <div style={{fontSize:14,fontWeight:700,marginBottom:4}}>{r.startDate} → {r.endDate}</div>
+                    {r.reason&&<div style={{fontSize:12,color:DIM,marginBottom:6}}>"{r.reason}"</div>}
+                    <span style={{fontSize:10,fontWeight:700,letterSpacing:1,padding:'2px 8px',borderRadius:20,background:`${statusColor}22`,color:statusColor}}>{statusLabel}</span>
                   </div>
                 )
               })
             }
           </div>
-        </div>
+        )}
+
+        <Modal open={timeOffReqOpen} onClose={()=>setTimeOffReqOpen(false)} title="Request Time Off">
+          <Field label="Start Date *"><input type="date" style={inp} value={timeOffReqF.startDate} onChange={e=>setTimeOffReqF(f=>({...f,startDate:e.target.value}))}/></Field>
+          <Field label="End Date *"><input type="date" style={inp} value={timeOffReqF.endDate} onChange={e=>setTimeOffReqF(f=>({...f,endDate:e.target.value}))}/></Field>
+          <Field label="Reason (optional)">
+            <textarea style={{...inp,minHeight:70,resize:'vertical'}} value={timeOffReqF.reason} onChange={e=>setTimeOffReqF(f=>({...f,reason:e.target.value}))} placeholder="e.g. Family vacation"/>
+          </Field>
+          <div style={{display:'flex',gap:10,justifyContent:'flex-end',marginTop:20}}>
+            <Btn outline onClick={()=>setTimeOffReqOpen(false)}>Cancel</Btn>
+            <Btn gold onClick={submitTimeOffRequest}>Submit Request</Btn>
+          </div>
+        </Modal>
+
         <Toast msg={toast}/>
       </div>
     )
