@@ -348,6 +348,7 @@ export default function App(){
   const[opsCalView,setOpsCalView]=useState('list')
   const[opsTab,setOpsTab]=useState('schedule')
   const[sessionTypeModal,setSessionTypeModal]=useState(false)
+  const[saving,setSaving]=useState(false)
   const[opsCalMonth,setOpsCalMonth]=useState({year:new Date().getFullYear(),month:new Date().getMonth()})
   const[opsSelDay,setOpsSelDay]=useState(null)
   const[coachCalView,setCoachCalView]=useState('day')
@@ -485,19 +486,21 @@ export default function App(){
 
   async function saveSolo(){
     if(!soloF.client||!soloF.date||!soloF.time||!soloF.coachId){setToast('Fill in all required fields');return}
+    if(saving)return;setSaving(true)
     await push(ref(db,'sessions'),{type:'solo',clientName:soloF.client,date:soloF.date,time:soloF.time,duration:parseInt(soloF.dur),coachId:soloF.coachId,notes:soloF.notes,repeat:'once'})
     notifyCoach(soloF.coachId,`New 1-on-1 Session`,`${soloF.client} · ${soloF.date} at ${fmt12(soloF.time)}`,db)
-    setSoloOpen(false);setSoloF(blankSolo);setToast('1-on-1 assigned ✓')
+    setSoloOpen(false);setSoloF(blankSolo);setToast('1-on-1 assigned ✓');setSaving(false)
   }
   async function saveGroup(){
     if(!groupF.name||!groupF.time||!groupF.coachId){setToast('Fill in all required fields');return}
     if(groupF.repeat==='once'&&!groupF.date){setToast('Pick a date');return}
     const sess={type:'group',name:groupF.name,time:groupF.time,duration:parseInt(groupF.dur),coachId:groupF.coachId,repeat:groupF.repeat}
     if(groupF.repeat==='weekly')sess.dow=parseInt(groupF.dow);else sess.date=groupF.date
+    if(saving)return;setSaving(true)
     await push(ref(db,'sessions'),sess)
     const when=groupF.repeat==='weekly'?`Every ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][parseInt(groupF.dow)]}`:groupF.date
     notifyCoach(groupF.coachId,'New Group Session',`${groupF.name} · ${when} at ${fmt12(groupF.time)}`,db)
-    setGroupOpen(false);setGroupF(blankGroup);setToast('Group session added ✓')
+    setGroupOpen(false);setGroupF(blankGroup);setToast('Group session added ✓');setSaving(false)
   }
   async function saveEdit(){
     if(!editF.time||!editF.coachId){setToast('Fill in required fields');return}
