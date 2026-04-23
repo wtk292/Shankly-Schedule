@@ -411,7 +411,7 @@ export default function App(){
   },[])
 
   useEffect(()=>{if(!toast)return;const t=setTimeout(()=>setToast(''),2400);return()=>clearTimeout(t)},[toast])
-  useEffect(()=>{chatEndRef.current?.scrollIntoView({behavior:'smooth'})},[messages,coachTab])
+  useEffect(()=>{if(coachTab==='chat')chatEndRef.current?.scrollIntoView({behavior:'smooth'})},[messages,coachTab])
 
   function getSessionsForCoach(coachId,date){
     const dk=dateKey(date),dow=date.getDay()
