@@ -531,6 +531,16 @@ export default function App(){
     else await set(ref(db,`availability/${availCoach}/${availDate}`),true)
     setToast(current?'Marked available':'Marked unavailable')
   }
+  async function confirmSession(sessionId){
+    await set(ref(db,`sessions/${sessionId}/confirmedBy/${loggedInCoach.id}`),true)
+    const sess=sessions.find(s=>s.id===sessionId)
+    if(sess){
+      const adminCoaches=coaches.filter(c=>c.isAdmin)
+      adminCoaches.forEach(c=>notifyCoach(c.id,'Session Confirmed ✓',`${loggedInCoach.name} confirmed: ${sess.type==='solo'?`1-on-1 · ${sess.clientName}`:sess.name}`,db))
+    }
+    setToast('Session confirmed ✓')
+  }
+
   async function sendMessage(){
     if(!chatMsg.trim()||!loggedInCoach)return
     const text=chatMsg.trim()
@@ -752,7 +762,10 @@ export default function App(){
                               ?<div style={{fontSize:11,color:GRAY3,textAlign:'center',padding:'12px 0'}}>No sessions</div>
                               :sess.map(s=>(
                                 <div key={s.id} style={{background:GRAY2,borderRadius:6,padding:'7px 9px',marginBottom:5,borderLeft:`3px solid ${s.type==='solo'?BLUE:GOLD}`,position:'relative'}}>
-                                  <div style={{fontSize:14,fontWeight:900,lineHeight:1}}>{fmt12(s.time)}</div>
+                                  <div style={{fontSize:14,fontWeight:900,lineHeight:1,display:'flex',alignItems:'center',gap:5}}>
+                                    {fmt12(s.time)}
+                                    {s.confirmedBy?.[s.coachId]&&<span style={{fontSize:9,background:'rgba(129,199,132,0.2)',color:GREEN,padding:'1px 5px',borderRadius:8,fontWeight:700}}>✓</span>}
+                                  </div>
                                   <div style={{fontSize:10,color:DIM,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',maxWidth:'calc(100% - 38px)'}}>{s.type==='solo'?`1:1 · ${s.clientName}`:s.name}</div>
                                   <div style={{position:'absolute',top:4,right:4,display:'flex',gap:3}}>
                                     <button onClick={()=>openEdit(s)} style={{background:'transparent',border:'none',color:GRAY3,cursor:'pointer',fontSize:12,lineHeight:1,padding:0}}
@@ -1248,8 +1261,14 @@ export default function App(){
                           <div style={{fontSize:10,color:DIM,marginTop:3}}>{s.duration}min</div>
                         </div>
                         <div style={{flex:1}}>
-                          <div style={{fontSize:15,fontWeight:700,marginBottom:3}}>{s.type==='solo'?`1-on-1 · ${s.clientName}`:s.name}</div>
-                          <div style={{fontSize:11,color:DIM}}>{s.type==='solo'?(s.notes||'No notes'):`Group · ${s.duration}min`}</div>
+                          <div style={{fontSize:15,fontWeight:700,marginBottom:3,display:'flex',alignItems:'center',gap:6}}>
+                            {s.type==='solo'?`1-on-1 · ${s.clientName}`:s.name}
+                            {s.confirmedBy?.[loggedInCoach.id]&&<span style={{fontSize:10,background:'rgba(129,199,132,0.2)',color:GREEN,padding:'1px 7px',borderRadius:10,fontWeight:700}}>✓ Confirmed</span>}
+                          </div>
+                          <div style={{fontSize:11,color:DIM,marginBottom:s.confirmedBy?.[loggedInCoach.id]?0:10}}>{s.type==='solo'?(s.notes||'No notes'):`Group · ${s.duration}min`}</div>
+                          {!s.confirmedBy?.[loggedInCoach.id]&&(
+                            <Btn gold onClick={()=>confirmSession(s.id)} style={{fontSize:11,padding:'5px 14px',marginTop:6}}>Confirm</Btn>
+                          )}
                         </div>
                       </div>
                     ))
@@ -1274,8 +1293,14 @@ export default function App(){
                             <div style={{fontSize:10,color:DIM,marginTop:2}}>{s.duration}min</div>
                           </div>
                           <div style={{flex:1}}>
-                            <div style={{fontSize:14,fontWeight:700,marginBottom:2}}>{s.type==='solo'?`1-on-1 · ${s.clientName}`:s.name}</div>
-                            <div style={{fontSize:11,color:DIM}}>{s.type==='solo'?(s.notes||'No notes'):`Group · ${s.duration}min`}</div>
+                            <div style={{fontSize:14,fontWeight:700,marginBottom:2,display:'flex',alignItems:'center',gap:6}}>
+                              {s.type==='solo'?`1-on-1 · ${s.clientName}`:s.name}
+                              {s.confirmedBy?.[loggedInCoach.id]&&<span style={{fontSize:10,background:'rgba(129,199,132,0.2)',color:GREEN,padding:'1px 7px',borderRadius:10,fontWeight:700}}>✓</span>}
+                            </div>
+                            <div style={{fontSize:11,color:DIM,marginBottom:s.confirmedBy?.[loggedInCoach.id]?0:8}}>{s.type==='solo'?(s.notes||'No notes'):`Group · ${s.duration}min`}</div>
+                            {!s.confirmedBy?.[loggedInCoach.id]&&(
+                              <Btn gold onClick={()=>confirmSession(s.id)} style={{fontSize:10,padding:'4px 12px',marginTop:4}}>Confirm</Btn>
+                            )}
                           </div>
                         </div>
                       ))
