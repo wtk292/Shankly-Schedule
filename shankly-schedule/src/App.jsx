@@ -554,18 +554,18 @@ export default function App(){
   }
   useEffect(()=>{if(pinVal.length>=4&&view==='pin'){checkPin(pinVal)}},[pinVal,coaches])
 
-  // Restore session from localStorage once coaches load
+  // Restore session from localStorage once data is fully loaded
   useEffect(()=>{
-    if(coaches.length===0)return
+    if(loading)return  // wait until Firebase data is fully loaded
     try{
       const savedId=localStorage.getItem('shankly_coach_id')
-      if(savedId&&!loggedInCoach){
-        const coach=coaches.find(c=>c.id===savedId)
-        if(coach){setLoggedInCoach(coach);setView('coach');setupNotifications(coach.id)}
-        else{localStorage.removeItem('shankly_coach_id')}
-      }
+      if(!savedId)return
+      if(coaches.length===0)return
+      const coach=coaches.find(c=>c.id===savedId)
+      if(coach){setLoggedInCoach(coach);setView('coach');setupNotifications(coach.id)}
+      else{localStorage.removeItem('shankly_coach_id')}
     }catch{}
-  },[coaches])
+  },[loading,coaches])
 
   // ── LANDING ──────────────────────────────────────────────────────
   if(view==='landing')return(
