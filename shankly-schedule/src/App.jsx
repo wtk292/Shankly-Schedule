@@ -1076,13 +1076,49 @@ export default function App(){
           </div>
           <div style={{marginTop:20,borderTop:`1px solid ${GRAY3}`,paddingTop:16}}>
             <div style={{fontSize:10,fontWeight:700,letterSpacing:1.5,textTransform:'uppercase',color:DIM,marginBottom:10}}>Currently Unavailable</div>
-            {Object.entries(availability).flatMap(([cId,dates])=>Object.entries(dates).filter(([,v])=>v).map(([dk])=>{
-              const coach=coaches.find(c=>c.id===cId)
-              return(<div key={cId+dk} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 10px',background:GRAY2,borderRadius:6,marginBottom:5}}>
-                <span style={{fontSize:12}}>{coach?.name||'Unknown'} · {dk}</span>
-                <button onClick={async()=>{await remove(ref(db,`availability/${cId}/${dk}`));setToast('Removed')}} style={{background:'transparent',border:'none',color:DIM,cursor:'pointer',fontSize:14}}>×</button>
-              </div>)
-            }))}
+            {(()=>{
+              // Group by coach, then find consecutive date ranges
+              const entries=Object.entries(availability)
+              if(entries.length===0)return<div style={{fontSize:12,color:DIM,textAlign:'center',padding:'10px 0'}}>No unavailability set</div>
+              return entries.map(([cId,dates])=>{
+                const coach=coaches.find(c=>c.id===cId)
+                const activeDates=Object.entries(dates).filter(([,v])=>v).map(([dk])=>dk).sort()
+                if(activeDates.length===0)return null
+                // Group consecutive dates into ranges
+                const ranges=[]
+                let start=activeDates[0],prev=activeDates[0]
+                for(let i=1;i<activeDates.length;i++){
+                  const d=new Date(activeDates[i]+'T00:00:00')
+                  const p=new Date(prev+'T00:00:00')
+                  p.setDate(p.getDate()+1)
+                  if(d.toISOString().slice(0,10)===p.toISOString().slice(0,10)){prev=activeDates[i]}
+                  else{ranges.push({start,end:prev});start=activeDates[i];prev=activeDates[i]}
+                }
+                ranges.push({start,end:prev})
+                return(
+                  <div key={cId} style={{marginBottom:10}}>
+                    <div style={{fontSize:12,fontWeight:700,color:WHITE,marginBottom:5}}>{coach?.name||'Unknown'}</div>
+                    {ranges.map((r,i)=>(
+                      <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 10px',background:GRAY2,borderRadius:6,marginBottom:4}}>
+                        <span style={{fontSize:12,color:DIM}}>{r.start===r.end?r.start:`${r.start} → ${r.end}`}</span>
+                        <button onClick={async()=>{
+                          // Remove all dates in this range
+                          const d=new Date(r.start+'T00:00:00')
+                          const end=new Date(r.end+'T00:00:00')
+                          while(d<=end){
+                            const dk=d.toISOString().slice(0,10)
+                            await remove(ref(db,`availability/${cId}/${dk}`))
+                            d.setDate(d.getDate()+1)
+                          }
+                          setToast('Removed')
+                        }} style={{background:'transparent',border:'none',color:DIM,cursor:'pointer',fontSize:14}}
+                          onMouseEnter={e=>e.target.style.color=RED} onMouseLeave={e=>e.target.style.color=DIM}>×</button>
+                      </div>
+                    ))}
+                  </div>
+                )
+              })
+            })()}
           </div>
         </Modal>
 
