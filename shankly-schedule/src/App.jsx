@@ -1136,7 +1136,7 @@ export default function App(){
                 <div key={s.id} style={{background:GRAY2,borderRadius:8,padding:'12px 14px',marginBottom:8,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                   <div>
                     <div style={{fontWeight:700,fontSize:13}}>{s.title}</div>
-                    <div style={{fontSize:11,color:DIM,marginTop:2}}>{s.date} · {fmt12(s.time)}{s.claimedBy?` · ✅ ${coaches.find(c=>c.id===s.claimedBy)?.name||'Claimed'}':' · Open'}</div>
+                    <div style={{fontSize:11,color:DIM,marginTop:2}}>{s.date} · {fmt12(s.time)}{s.claimedBy?` · ✅ ${coaches.find(c=>c.id===s.claimedBy)?.name||'Claimed'}`:' · Open'}</div>
                   </div>
                   <button onClick={async()=>{await remove(ref(db,`shifts/${s.id}`));setToast('Shift removed')}}
                     style={{background:'transparent',border:'none',color:GRAY3,cursor:'pointer',fontSize:18}}
@@ -1514,5 +1514,6 @@ export default function App(){
 
   return null
 }
+
 
 
