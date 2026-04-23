@@ -783,11 +783,16 @@ export default function App(){
                               ?<div style={{fontSize:11,color:GRAY3,textAlign:'center',padding:'12px 0'}}>No sessions</div>
                               :sess.map(s=>(
                                 <div key={s.id} style={{background:GRAY2,borderRadius:6,padding:'7px 9px',marginBottom:5,borderLeft:`3px solid ${s.type==='solo'?BLUE:GOLD}`,position:'relative'}}>
-                                  <div style={{fontSize:14,fontWeight:900,lineHeight:1,display:'flex',alignItems:'center',gap:5}}>
+                                  <div style={{fontSize:14,fontWeight:900,lineHeight:1}}>
                                     {fmt12(s.time)}
-                                    {s.confirmedBy?.[s.coachId]&&<span style={{fontSize:9,background:'rgba(129,199,132,0.2)',color:GREEN,padding:'1px 5px',borderRadius:8,fontWeight:700}}>✓</span>}
                                   </div>
                                   <div style={{fontSize:10,color:DIM,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',maxWidth:'calc(100% - 38px)'}}>{s.type==='solo'?`1:1 · ${s.clientName}`:s.name}</div>
+                                  <div style={{marginTop:4}}>
+                                    {s.confirmedBy?.[s.coachId]
+                                      ?<span style={{fontSize:9,fontWeight:800,color:GREEN,background:'rgba(129,199,132,0.15)',padding:'2px 7px',borderRadius:10,letterSpacing:0.5}}>✓ Confirmed</span>
+                                      :<span style={{fontSize:9,fontWeight:800,color:ORANGE,background:'rgba(255,183,77,0.12)',padding:'2px 7px',borderRadius:10,letterSpacing:0.5}}>Not Confirmed</span>
+                                    }
+                                  </div>
                                   <div style={{position:'absolute',top:4,right:4,display:'flex',gap:3}}>
                                     <button onClick={()=>openEdit(s)} style={{background:'transparent',border:'none',color:GRAY3,cursor:'pointer',fontSize:12,lineHeight:1,padding:0}}
                                       onMouseEnter={e=>e.target.style.color=GOLD} onMouseLeave={e=>e.target.style.color=GRAY3}>✎</button>
