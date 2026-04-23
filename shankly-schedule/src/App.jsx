@@ -159,7 +159,7 @@ function MonthCalendar({year,month,onDayClick,getDayDots,selectedDay}){
   )
 }
 
-function PinPad({value,onChange,maxLen=4}){
+function PinPad({value,onChange,maxLen={4}}){
   const digits=['1','2','3','4','5','6','7','8','9','','0','⌫']
   return(
     <div>
@@ -208,6 +208,27 @@ function BottomNav({tab,setTab,isAdmin,onOps}){
           <span style={{fontSize:9,fontWeight:400,color:GOLD,letterSpacing:0.3,textTransform:'uppercase'}}>Ops</span>
         </button>
       )}
+    </div>
+  )
+}
+
+function OpsBottomNav({tab,setTab,pendingCount}){
+  const tabs=[
+    {id:'schedule',icon:'📅',label:'Schedule'},
+    {id:'stats',icon:'📊',label:'Stats'},
+    {id:'timeoff',icon:'🌴',label:'Time Off'},
+    {id:'manage',icon:'⚙️',label:'Manage'},
+  ]
+  return(
+    <div style={{position:'fixed',bottom:0,left:0,right:0,zIndex:50,background:'#111',borderTop:`1px solid ${GRAY3}`,display:'flex',alignItems:'stretch',paddingBottom:'env(safe-area-inset-bottom)'}}>
+      {tabs.map(t=>(
+        <button key={t.id} onClick={()=>setTab(t.id)} style={{flex:1,background:'transparent',border:'none',cursor:'pointer',padding:'8px 4px 6px',display:'flex',flexDirection:'column',alignItems:'center',gap:3,transition:'all 0.15s',fontFamily:'inherit',position:'relative'}}>
+          <span style={{fontSize:20}}>{t.icon}</span>
+          <span style={{fontSize:9,fontWeight:tab===t.id?800:400,color:tab===t.id?GOLD:DIM,letterSpacing:0.3,textTransform:'uppercase'}}>{t.label}</span>
+          {t.id==='timeoff'&&pendingCount>0&&<span style={{position:'absolute',top:4,right:'calc(50% - 14px)',background:ORANGE,color:BLACK,fontSize:8,fontWeight:900,padding:'1px 4px',borderRadius:10}}>{pendingCount}</span>}
+          {tab===t.id&&<div style={{width:4,height:4,borderRadius:'50%',background:GOLD,marginTop:1}}/>}
+        </button>
+      ))}
     </div>
   )
 }
@@ -319,6 +340,8 @@ export default function App(){
   const[pwVal,setPwVal]=useState('')
   const[pwError,setPwError]=useState('')
   const[opsCalView,setOpsCalView]=useState('list')
+  const[opsTab,setOpsTab]=useState('schedule')
+  const[sessionTypeModal,setSessionTypeModal]=useState(false)
   const[opsCalMonth,setOpsCalMonth]=useState({year:new Date().getFullYear(),month:new Date().getMonth()})
   const[opsSelDay,setOpsSelDay]=useState(null)
   const[coachCalView,setCoachCalView]=useState('list')
@@ -430,6 +453,7 @@ export default function App(){
     setEditOpen(true)
   }
   const pendingTimeOff=timeOffRequests.filter(r=>r.status==='pending')
+  const allTimeOff=timeOffRequests
 
   async function saveSolo(){
     if(!soloF.client||!soloF.date||!soloF.time||!soloF.coachId){setToast('Fill in all required fields');return}
@@ -596,7 +620,7 @@ export default function App(){
       <img src={LOGO_SRC} alt="Logo" style={{width:72,height:72,borderRadius:14,marginBottom:20,objectFit:'cover'}}/>
       <div style={{fontSize:11,letterSpacing:3,textTransform:'uppercase',color:DIM,marginBottom:28}}>Enter Your PIN</div>
       <div style={{background:GRAY,border:`1px solid rgba(245,197,24,0.2)`,borderRadius:16,padding:'28px 24px',width:'100%',maxWidth:320}}>
-        <PinPad value={pinVal} onChange={v=>{setPinError('');setPinVal(v)}} maxLen={6}/>
+        <PinPad value={pinVal} onChange={v=>{setPinError('');setPinVal(v)}} maxLen={4}/>
         {pinError&&<div style={{fontSize:12,color:RED,marginTop:16}}>{pinError}</div>}
         <div onClick={()=>{setView('landing');setPinVal('');setPinError('')}} style={{fontSize:12,color:DIM,cursor:'pointer',marginTop:20,textDecoration:'underline'}}>← Back</div>
       </div>
@@ -621,34 +645,36 @@ export default function App(){
   // ── OPS VIEW ──────────────────────────────────────────────────────
   if(view==='ops'){
     const pendingCount=pendingTimeOff.length
+    if(!opsTab)setOpsTab('schedule')
     return(
-      <div style={PAGE}>
+      <div style={{...PAGE,paddingBottom:68}}>
+        {/* ── OPS HEADER ── */}
         <div style={{background:BLACK,borderBottom:`1px solid rgba(245,197,24,0.18)`,padding:'12px 16px',position:'sticky',top:0,zIndex:50}}>
-          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
             <div style={{display:'flex',alignItems:'center',gap:10}}>
               <img src={LOGO_SRC} alt="Logo" style={{width:34,height:34,borderRadius:7,objectFit:'cover'}}/>
               <span style={{fontSize:16,fontWeight:900,letterSpacing:2,textTransform:'uppercase',color:GOLD}}>Ops</span>
             </div>
-            <div style={{display:'flex',gap:6,alignItems:'center'}}>
+            <div style={{display:'flex',gap:8,alignItems:'center'}}>
+              {opsTab==='schedule'&&(
+                <div style={{display:'flex',alignItems:'center',gap:6}}>
+                  <NavBtn onClick={()=>{const d=new Date(opsDate);d.setDate(d.getDate()-1);setOpsDate(d)}}>‹</NavBtn>
+                  <span style={{fontSize:12,fontWeight:800,textTransform:'uppercase'}}>{fmtLong(opsDate)}</span>
+                  <NavBtn onClick={()=>{const d=new Date(opsDate);d.setDate(d.getDate()+1);setOpsDate(d)}}>›</NavBtn>
+                </div>
+              )}
+              <Btn gold onClick={()=>{
+                setSessionTypeModal(true)
+              }} style={{fontSize:12,padding:'8px 14px'}}>+ Session</Btn>
               {loggedInCoach
-                ?<Btn outline onClick={()=>setView('coach')} style={{fontSize:11}}>← My Schedule</Btn>
+                ?<Btn outline onClick={()=>setView('coach')} style={{fontSize:11}}>← Me</Btn>
                 :<button onClick={()=>setView('landing')} style={{background:'transparent',border:`1px solid ${GRAY3}`,color:DIM,fontSize:11,padding:'5px 10px',borderRadius:6,cursor:'pointer',fontFamily:'inherit'}}>Log Out</button>
               }
             </div>
           </div>
-          <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-            <Btn outline onClick={()=>setCoachMgmtOpen(true)} style={{fontSize:11}}>Coaches</Btn>
-            <Btn outline onClick={()=>setAvailOpen(true)} style={{fontSize:11}}>Availability</Btn>
-            <Btn outline onClick={()=>setStatsOpen(true)} style={{fontSize:11}}>Stats</Btn>
-            <Btn outline onClick={()=>{setAnnounceText(announcement?.text||'');setAnnounceOpen(true)}} style={{fontSize:11}}>📢 Announce</Btn>
-            <button onClick={()=>setTimeOffOpen(true)} style={{background:'transparent',border:`1px solid ${pendingCount>0?ORANGE:GRAY3}`,color:pendingCount>0?ORANGE:WHITE,fontSize:11,fontWeight:700,padding:'8px 10px',borderRadius:7,cursor:'pointer',fontFamily:'inherit'}}>
-              🌴 Time Off{pendingCount>0&&<span style={{background:ORANGE,color:BLACK,fontSize:9,fontWeight:900,padding:'1px 5px',borderRadius:10,marginLeft:4}}>{pendingCount}</span>}
-            </button>
-            <Btn outline onClick={()=>{setGroupF({...blankGroup,coachId:eligibleCoaches(['group','mixed'])[0]?.id||''}); setGroupOpen(true)}} style={{fontSize:11}}>+ Group</Btn>
-            <Btn gold onClick={()=>{setSoloF({...blankSolo,date:dateKey(opsDate),coachId:eligibleCoaches(['solo','mixed'])[0]?.id||''});setSoloOpen(true)}} style={{fontSize:11}}>+ 1-on-1</Btn>
-          </div>
         </div>
 
+        {/* ── ANNOUNCEMENT BANNER ── */}
         {announcement&&(
           <div style={{background:'rgba(245,197,24,0.08)',borderBottom:`1px solid rgba(245,197,24,0.15)`,padding:'10px 16px',display:'flex',alignItems:'center',gap:10,justifyContent:'space-between'}}>
             <div style={{display:'flex',gap:8,alignItems:'center'}}><span>📢</span><span style={{fontSize:12,color:WHITE}}>{announcement.text}</span></div>
@@ -656,121 +682,239 @@ export default function App(){
           </div>
         )}
 
-        <div style={{padding:'16px'}}>
-          <div style={{display:'flex',gap:8,marginBottom:14,alignItems:'center',flexWrap:'wrap'}}>
-            <ToggleBtn active={opsCalView==='list'} onClick={()=>setOpsCalView('list')}>☰ List</ToggleBtn>
-            <ToggleBtn active={opsCalView==='calendar'} onClick={()=>setOpsCalView('calendar')}>📅 Calendar</ToggleBtn>
-            {opsCalView==='list'&&(
-              <div style={{display:'flex',alignItems:'center',gap:8,marginLeft:'auto',flexWrap:'wrap'}}>
-                <NavBtn onClick={()=>{const d=new Date(opsDate);d.setDate(d.getDate()-1);setOpsDate(d)}}>‹</NavBtn>
-                <span style={{fontSize:14,fontWeight:800,textTransform:'uppercase'}}>{fmtLong(opsDate)}</span>
-                {isToday(opsDate)&&<span style={{background:GOLD,color:BLACK,fontSize:9,fontWeight:800,letterSpacing:1.5,textTransform:'uppercase',padding:'2px 7px',borderRadius:20}}>Today</span>}
-                <NavBtn onClick={()=>{const d=new Date(opsDate);d.setDate(d.getDate()+1);setOpsDate(d)}}>›</NavBtn>
+        {/* ── SCHEDULE TAB ── */}
+        {opsTab==='schedule'&&(
+          <div style={{padding:16}}>
+            <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:14}}>
+              <select
+                value={opsCalView}
+                onChange={e=>setOpsCalView(e.target.value)}
+                style={{...inp,fontSize:12,padding:'6px 10px',width:'auto',minWidth:120}}
+              >
+                <option value="list">☰ List View</option>
+                <option value="calendar">📅 Calendar</option>
+              </select>
+              {opsCalView==='list'&&(
                 <Btn outline onClick={()=>setOpsDate(todayMidnight())} style={{fontSize:10,padding:'5px 10px'}}>Today</Btn>
-              </div>
-            )}
-            {opsCalView==='calendar'&&(
-              <div style={{display:'flex',alignItems:'center',gap:8,marginLeft:'auto'}}>
-                <NavBtn onClick={()=>changeMonth(opsCalMonth,-1,setOpsCalMonth)}>‹</NavBtn>
-                <span style={{fontSize:14,fontWeight:800,textTransform:'uppercase'}}>{MONTHS[opsCalMonth.month]} {opsCalMonth.year}</span>
-                <NavBtn onClick={()=>changeMonth(opsCalMonth,1,setOpsCalMonth)}>›</NavBtn>
-              </div>
-            )}
-          </div>
-
-          {opsCalView==='list'&&(
-            loading?<Spinner/>:coaches.length===0
-              ?<div style={{textAlign:'center',padding:'60px 20px',color:DIM}}>No coaches yet. Add them in <strong style={{color:GOLD}}>Coaches</strong>.</div>
-              :<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(175px,1fr))',gap:10}}>
-                {coaches.map(coach=>{
-                  const sess=getSessionsForCoach(coach.id,opsDate)
-                  const unavail=!isCoachAvailable(coach.id,opsDate)
-                  const tagStyle=coach.role==='group'?{background:'rgba(245,197,24,0.13)',color:GOLD}:coach.role==='solo'?{background:'rgba(79,195,247,0.13)',color:BLUE}:{background:'rgba(129,199,132,0.13)',color:GREEN}
-                  const tagText=coach.role==='group'?'GRP':coach.role==='solo'?'1:1':'MIX'
-                  return(
-                    <div key={coach.id} style={{background:GRAY,borderRadius:10,border:`1px solid ${unavail?'rgba(255,183,77,0.4)':GRAY2}`,overflow:'hidden',opacity:unavail?0.75:1}}>
-                      <div style={{padding:'9px 12px',borderBottom:`1px solid ${GRAY2}`,display:'flex',alignItems:'center',justifyContent:'space-between',gap:6}}>
-                        <div style={{fontWeight:700,fontSize:13,display:'flex',alignItems:'center',gap:5}}>
-                          {coach.name}
-                          {coach.isAdmin&&<span style={{fontSize:8,background:'rgba(245,197,24,0.2)',color:GOLD,padding:'1px 5px',borderRadius:4,fontWeight:800}}>OPS</span>}
-                        </div>
-                        <div style={{display:'flex',gap:4,alignItems:'center'}}>
-                          {unavail&&<span style={{fontSize:9,fontWeight:800,padding:'2px 6px',borderRadius:4,background:'rgba(255,183,77,0.15)',color:ORANGE}}>OFF</span>}
-                          <span style={{fontSize:9,fontWeight:800,letterSpacing:1,padding:'2px 6px',borderRadius:4,...tagStyle}}>{tagText}</span>
-                        </div>
-                      </div>
-                      <div style={{padding:8}}>
-                        {unavail&&sess.length===0
-                          ?<div style={{fontSize:11,color:ORANGE,textAlign:'center',padding:'12px 0'}}>Unavailable</div>
-                          :sess.length===0
-                            ?<div style={{fontSize:11,color:GRAY3,textAlign:'center',padding:'12px 0'}}>No sessions</div>
-                            :sess.map(s=>(
-                              <div key={s.id} style={{background:GRAY2,borderRadius:6,padding:'7px 9px',marginBottom:5,borderLeft:`3px solid ${s.type==='solo'?BLUE:GOLD}`,position:'relative'}}>
-                                <div style={{fontSize:14,fontWeight:900,lineHeight:1}}>{fmt12(s.time)}</div>
-                                <div style={{fontSize:10,color:DIM,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',maxWidth:'calc(100% - 38px)'}}>{s.type==='solo'?`1:1 · ${s.clientName}`:s.name}</div>
-                                <div style={{position:'absolute',top:4,right:4,display:'flex',gap:3}}>
-                                  <button onClick={()=>openEdit(s)} style={{background:'transparent',border:'none',color:GRAY3,cursor:'pointer',fontSize:12,lineHeight:1,padding:0,transition:'color 0.15s'}}
-                                    onMouseEnter={e=>e.target.style.color=GOLD} onMouseLeave={e=>e.target.style.color=GRAY3}>✎</button>
-                                  <button onClick={()=>removeSession(s.id)} style={{background:'transparent',border:'none',color:GRAY3,cursor:'pointer',fontSize:14,lineHeight:1,padding:0,transition:'color 0.15s'}}
-                                    onMouseEnter={e=>e.target.style.color=RED} onMouseLeave={e=>e.target.style.color=GRAY3}>×</button>
-                                </div>
-                              </div>
-                            ))
-                        }
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-          )}
-
-          {opsCalView==='calendar'&&(
-            <div>
-              <MonthCalendar year={opsCalMonth.year} month={opsCalMonth.month} selectedDay={opsSelDay} onDayClick={d=>setOpsSelDay(d)} getDayDots={dk=>getOpsDayDots(dk)}/>
-              {opsSelDay&&(
-                <div style={{marginTop:16,background:GRAY,borderRadius:10,padding:14,border:`1px solid ${GRAY2}`}}>
-                  <div style={{fontSize:12,fontWeight:700,letterSpacing:1,textTransform:'uppercase',color:GOLD,marginBottom:10}}>{fmtLong(opsSelDay)}</div>
-                  {getAllSessionsOnDate(opsSelDay).length===0&&getEventsOnDate(dateKey(opsSelDay)).length===0
-                    ?<div style={{fontSize:12,color:DIM,textAlign:'center',padding:'12px 0'}}>No sessions or events</div>
-                    :<>
-                      {getAllSessionsOnDate(opsSelDay).sort((a,b)=>a.time>b.time?1:-1).map(s=>{
-                        const coach=coaches.find(c=>c.id===s.coachId)
-                        return(
-                          <div key={s.id} style={{background:GRAY2,borderRadius:6,padding:'8px 10px',marginBottom:6,borderLeft:`3px solid ${s.type==='solo'?BLUE:GOLD}`,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                            <div>
-                              <div style={{fontSize:13,fontWeight:700}}>{fmt12(s.time)} · {s.type==='solo'?`1:1 · ${s.clientName}`:s.name}</div>
-                              <div style={{fontSize:11,color:DIM,marginTop:2}}>{coach?.name||'Unknown'}</div>
-                            </div>
-                            <div style={{display:'flex',gap:6}}>
-                              <button onClick={()=>openEdit(s)} style={{background:'transparent',border:'none',color:GRAY3,cursor:'pointer',fontSize:14}}
-                                onMouseEnter={e=>e.target.style.color=GOLD} onMouseLeave={e=>e.target.style.color=GRAY3}>✎</button>
-                              <button onClick={()=>removeSession(s.id)} style={{background:'transparent',border:'none',color:GRAY3,cursor:'pointer',fontSize:16,padding:'0 4px'}}
-                                onMouseEnter={e=>e.target.style.color=RED} onMouseLeave={e=>e.target.style.color=GRAY3}>×</button>
-                            </div>
-                          </div>
-                        )
-                      })}
-                      {getEventsOnDate(dateKey(opsSelDay)).map(e=>(
-                        <div key={e.id} style={{background:GRAY2,borderRadius:6,padding:'8px 10px',marginBottom:6,borderLeft:`3px solid ${PURPLE}`,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                          <div>
-                            <div style={{fontSize:13,fontWeight:700}}>{fmt12(e.startTime)} · {e.title}</div>
-                            <div style={{fontSize:11,color:DIM,marginTop:2}}>{e.brand==='both'?'Goalz + Shankly':e.brand==='goalz'?'Goalz':'Shankly'}</div>
-                          </div>
-                          <button onClick={()=>removeEvent(e.id)} style={{background:'transparent',border:'none',color:GRAY3,cursor:'pointer',fontSize:16,padding:'0 4px'}}
-                            onMouseEnter={e2=>e2.target.style.color=RED} onMouseLeave={e2=>e2.target.style.color=GRAY3}>×</button>
-                        </div>
-                      ))}
-                    </>
-                  }
+              )}
+              {opsCalView==='calendar'&&(
+                <div style={{display:'flex',alignItems:'center',gap:8,marginLeft:'auto'}}>
+                  <NavBtn onClick={()=>changeMonth(opsCalMonth,-1,setOpsCalMonth)}>‹</NavBtn>
+                  <span style={{fontSize:13,fontWeight:800,textTransform:'uppercase'}}>{MONTHS[opsCalMonth.month]} {opsCalMonth.year}</span>
+                  <NavBtn onClick={()=>changeMonth(opsCalMonth,1,setOpsCalMonth)}>›</NavBtn>
                 </div>
               )}
             </div>
-          )}
-        </div>
 
-        <div style={{position:'fixed',bottom:24,right:20,zIndex:40}}>
-          <Btn gold onClick={()=>setEventOpen(true)} style={{fontSize:12,padding:'10px 16px',borderRadius:30,boxShadow:'0 4px 20px rgba(245,197,24,0.3)'}}>+ Facility Event</Btn>
-        </div>
+            {opsCalView==='list'&&(
+              loading?<Spinner/>:coaches.length===0
+                ?<div style={{textAlign:'center',padding:'60px 20px',color:DIM}}>No coaches yet. Add them in <strong style={{color:GOLD}}>Manage</strong>.</div>
+                :<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(175px,1fr))',gap:10}}>
+                  {coaches.map(coach=>{
+                    const sess=getSessionsForCoach(coach.id,opsDate)
+                    const unavail=!isCoachAvailable(coach.id,opsDate)
+                    const tagStyle=coach.role==='group'?{background:'rgba(245,197,24,0.13)',color:GOLD}:coach.role==='solo'?{background:'rgba(79,195,247,0.13)',color:BLUE}:{background:'rgba(129,199,132,0.13)',color:GREEN}
+                    const tagText=coach.role==='group'?'GRP':coach.role==='solo'?'1:1':'MIX'
+                    return(
+                      <div key={coach.id} style={{background:GRAY,borderRadius:10,border:`1px solid ${unavail?'rgba(255,183,77,0.4)':GRAY2}`,overflow:'hidden',opacity:unavail?0.75:1}}>
+                        <div style={{padding:'9px 12px',borderBottom:`1px solid ${GRAY2}`,display:'flex',alignItems:'center',justifyContent:'space-between',gap:6}}>
+                          <div style={{fontWeight:700,fontSize:13,display:'flex',alignItems:'center',gap:5}}>
+                            {coach.name}
+                            {coach.isAdmin&&<span style={{fontSize:8,background:'rgba(245,197,24,0.2)',color:GOLD,padding:'1px 5px',borderRadius:4,fontWeight:800}}>OPS</span>}
+                          </div>
+                          <div style={{display:'flex',gap:4,alignItems:'center'}}>
+                            {unavail&&<span style={{fontSize:9,fontWeight:800,padding:'2px 6px',borderRadius:4,background:'rgba(255,183,77,0.15)',color:ORANGE}}>OFF</span>}
+                            <span style={{fontSize:9,fontWeight:800,letterSpacing:1,padding:'2px 6px',borderRadius:4,...tagStyle}}>{tagText}</span>
+                          </div>
+                        </div>
+                        <div style={{padding:8}}>
+                          {unavail&&sess.length===0
+                            ?<div style={{fontSize:11,color:ORANGE,textAlign:'center',padding:'12px 0'}}>Unavailable</div>
+                            :sess.length===0
+                              ?<div style={{fontSize:11,color:GRAY3,textAlign:'center',padding:'12px 0'}}>No sessions</div>
+                              :sess.map(s=>(
+                                <div key={s.id} style={{background:GRAY2,borderRadius:6,padding:'7px 9px',marginBottom:5,borderLeft:`3px solid ${s.type==='solo'?BLUE:GOLD}`,position:'relative'}}>
+                                  <div style={{fontSize:14,fontWeight:900,lineHeight:1}}>{fmt12(s.time)}</div>
+                                  <div style={{fontSize:10,color:DIM,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',maxWidth:'calc(100% - 38px)'}}>{s.type==='solo'?`1:1 · ${s.clientName}`:s.name}</div>
+                                  <div style={{position:'absolute',top:4,right:4,display:'flex',gap:3}}>
+                                    <button onClick={()=>openEdit(s)} style={{background:'transparent',border:'none',color:GRAY3,cursor:'pointer',fontSize:12,lineHeight:1,padding:0}}
+                                      onMouseEnter={e=>e.target.style.color=GOLD} onMouseLeave={e=>e.target.style.color=GRAY3}>✎</button>
+                                    <button onClick={()=>removeSession(s.id)} style={{background:'transparent',border:'none',color:GRAY3,cursor:'pointer',fontSize:14,lineHeight:1,padding:0}}
+                                      onMouseEnter={e=>e.target.style.color=RED} onMouseLeave={e=>e.target.style.color=GRAY3}>×</button>
+                                  </div>
+                                </div>
+                              ))
+                          }
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+            )}
+
+            {opsCalView==='calendar'&&(
+              <div>
+                <MonthCalendar year={opsCalMonth.year} month={opsCalMonth.month} selectedDay={opsSelDay} onDayClick={d=>setOpsSelDay(d)} getDayDots={dk=>getOpsDayDots(dk)}/>
+                {opsSelDay&&(
+                  <div style={{marginTop:16,background:GRAY,borderRadius:10,padding:14,border:`1px solid ${GRAY2}`}}>
+                    <div style={{fontSize:12,fontWeight:700,letterSpacing:1,textTransform:'uppercase',color:GOLD,marginBottom:10}}>{fmtLong(opsSelDay)}</div>
+                    {getAllSessionsOnDate(opsSelDay).length===0&&getEventsOnDate(dateKey(opsSelDay)).length===0
+                      ?<div style={{fontSize:12,color:DIM,textAlign:'center',padding:'12px 0'}}>No sessions or events</div>
+                      :<>
+                        {getAllSessionsOnDate(opsSelDay).sort((a,b)=>a.time>b.time?1:-1).map(s=>{
+                          const coach=coaches.find(c=>c.id===s.coachId)
+                          return(
+                            <div key={s.id} style={{background:GRAY2,borderRadius:6,padding:'8px 10px',marginBottom:6,borderLeft:`3px solid ${s.type==='solo'?BLUE:GOLD}`,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                              <div>
+                                <div style={{fontSize:13,fontWeight:700}}>{fmt12(s.time)} · {s.type==='solo'?`1:1 · ${s.clientName}`:s.name}</div>
+                                <div style={{fontSize:11,color:DIM,marginTop:2}}>{coach?.name||'Unknown'}</div>
+                              </div>
+                              <div style={{display:'flex',gap:6}}>
+                                <button onClick={()=>openEdit(s)} style={{background:'transparent',border:'none',color:GRAY3,cursor:'pointer',fontSize:14}}
+                                  onMouseEnter={e=>e.target.style.color=GOLD} onMouseLeave={e=>e.target.style.color=GRAY3}>✎</button>
+                                <button onClick={()=>removeSession(s.id)} style={{background:'transparent',border:'none',color:GRAY3,cursor:'pointer',fontSize:16,padding:'0 4px'}}
+                                  onMouseEnter={e=>e.target.style.color=RED} onMouseLeave={e=>e.target.style.color=GRAY3}>×</button>
+                              </div>
+                            </div>
+                          )
+                        })}
+                        {getEventsOnDate(dateKey(opsSelDay)).map(e=>(
+                          <div key={e.id} style={{background:GRAY2,borderRadius:6,padding:'8px 10px',marginBottom:6,borderLeft:`3px solid ${PURPLE}`,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                            <div>
+                              <div style={{fontSize:13,fontWeight:700}}>{fmt12(e.startTime)} · {e.title}</div>
+                              <div style={{fontSize:11,color:DIM,marginTop:2}}>{e.brand==='both'?'Goalz + Shankly':e.brand==='goalz'?'Goalz':'Shankly'}</div>
+                            </div>
+                            <button onClick={()=>removeEvent(e.id)} style={{background:'transparent',border:'none',color:GRAY3,cursor:'pointer',fontSize:16,padding:'0 4px'}}
+                              onMouseEnter={e2=>e2.target.style.color=RED} onMouseLeave={e2=>e2.target.style.color=GRAY3}>×</button>
+                          </div>
+                        ))}
+                      </>
+                    }
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── STATS TAB ── */}
+        {opsTab==='stats'&&(
+          <div style={{padding:16}}>
+            <div style={{fontSize:12,fontWeight:700,letterSpacing:1.5,textTransform:'uppercase',color:DIM,marginBottom:14}}>Session Counts</div>
+            {coaches.map(coach=>{
+              const total=sessions.filter(s=>s.coachId===coach.id).length
+              const solos=sessions.filter(s=>s.coachId===coach.id&&s.type==='solo').length
+              const groups=sessions.filter(s=>s.coachId===coach.id&&s.type==='group').length
+              return(
+                <div key={coach.id} style={{background:GRAY,borderRadius:10,padding:'12px 16px',marginBottom:8,border:`1px solid ${GRAY2}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                  <div style={{fontWeight:700,fontSize:14}}>{coach.name}</div>
+                  <div style={{display:'flex',gap:12,alignItems:'center'}}>
+                    <div style={{textAlign:'center'}}>
+                      <div style={{fontSize:18,fontWeight:900,color:BLUE}}>{solos}</div>
+                      <div style={{fontSize:9,color:DIM,textTransform:'uppercase',letterSpacing:1}}>1-on-1</div>
+                    </div>
+                    <div style={{textAlign:'center'}}>
+                      <div style={{fontSize:18,fontWeight:900,color:GOLD}}>{groups}</div>
+                      <div style={{fontSize:9,color:DIM,textTransform:'uppercase',letterSpacing:1}}>Group</div>
+                    </div>
+                    <div style={{textAlign:'center'}}>
+                      <div style={{fontSize:18,fontWeight:900,color:GREEN}}>{total}</div>
+                      <div style={{fontSize:9,color:DIM,textTransform:'uppercase',letterSpacing:1}}>Total</div>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* ── TIME OFF TAB ── */}
+        {opsTab==='timeoff'&&(
+          <div style={{padding:16}}>
+            <div style={{fontSize:12,fontWeight:700,letterSpacing:1.5,textTransform:'uppercase',color:DIM,marginBottom:14}}>Time Off Requests</div>
+            {pendingTimeOff.length===0&&allTimeOff.filter(r=>r.status!=='pending').length===0
+              ?<div style={{textAlign:'center',padding:'60px 20px',color:DIM}}>No time off requests</div>
+              :<>
+                {pendingTimeOff.length>0&&(
+                  <>
+                    <div style={{fontSize:10,fontWeight:800,letterSpacing:1.5,textTransform:'uppercase',color:ORANGE,marginBottom:8}}>Pending</div>
+                    {pendingTimeOff.map(r=>(
+                      <div key={r.id} style={{background:GRAY,borderRadius:10,padding:'12px 14px',marginBottom:8,border:`1px solid rgba(255,183,77,0.3)`}}>
+                        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:6}}>
+                          <div>
+                            <div style={{fontWeight:700,fontSize:13}}>{r.coachName}</div>
+                            <div style={{fontSize:11,color:DIM,marginTop:2}}>{r.startDate} → {r.endDate}</div>
+                            {r.reason&&<div style={{fontSize:11,color:WHITE,marginTop:4,fontStyle:'italic'}}>"{r.reason}"</div>}
+                          </div>
+                          <div style={{display:'flex',gap:6}}>
+                            <Btn gold onClick={()=>approveTimeOff(r)} style={{fontSize:11,padding:'5px 10px'}}>Approve</Btn>
+                            <Btn danger onClick={()=>denyTimeOff(r.id,r)} style={{fontSize:11,padding:'5px 10px'}}>Deny</Btn>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </>
+                )}
+                {allTimeOff.filter(r=>r.status!=='pending').length>0&&(
+                  <>
+                    <div style={{fontSize:10,fontWeight:800,letterSpacing:1.5,textTransform:'uppercase',color:DIM,marginBottom:8,marginTop:16}}>Resolved</div>
+                    {allTimeOff.filter(r=>r.status!=='pending').map(r=>(
+                      <div key={r.id} style={{background:GRAY,borderRadius:10,padding:'12px 14px',marginBottom:8,border:`1px solid ${GRAY2}`,opacity:0.7}}>
+                        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                          <div>
+                            <div style={{fontWeight:700,fontSize:13}}>{r.coachName}</div>
+                            <div style={{fontSize:11,color:DIM,marginTop:2}}>{r.startDate} → {r.endDate}</div>
+                          </div>
+                          <span style={{fontSize:11,fontWeight:800,color:r.status==='approved'?GREEN:RED,textTransform:'uppercase'}}>{r.status}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </>
+            }
+          </div>
+        )}
+
+        {/* ── MANAGE TAB ── */}
+        {opsTab==='manage'&&(
+          <div style={{padding:16}}>
+            <div style={{display:'flex',flexDirection:'column',gap:10}}>
+              <button onClick={()=>setCoachMgmtOpen(true)} style={{background:GRAY,border:`1px solid ${GRAY2}`,borderRadius:10,padding:'14px 16px',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',justifyContent:'space-between',color:WHITE}}>
+                <div style={{display:'flex',alignItems:'center',gap:10}}><span style={{fontSize:20}}>👥</span><span style={{fontSize:14,fontWeight:700}}>Coaches</span></div>
+                <span style={{color:DIM,fontSize:18}}>›</span>
+              </button>
+              <button onClick={()=>setAvailOpen(true)} style={{background:GRAY,border:`1px solid ${GRAY2}`,borderRadius:10,padding:'14px 16px',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',justifyContent:'space-between',color:WHITE}}>
+                <div style={{display:'flex',alignItems:'center',gap:10}}><span style={{fontSize:20}}>📆</span><span style={{fontSize:14,fontWeight:700}}>Availability</span></div>
+                <span style={{color:DIM,fontSize:18}}>›</span>
+              </button>
+              <button onClick={()=>{setAnnounceText(announcement?.text||'');setAnnounceOpen(true)}} style={{background:GRAY,border:`1px solid ${GRAY2}`,borderRadius:10,padding:'14px 16px',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',justifyContent:'space-between',color:WHITE}}>
+                <div style={{display:'flex',alignItems:'center',gap:10}}><span style={{fontSize:20}}>📢</span><span style={{fontSize:14,fontWeight:700}}>Announcement</span></div>
+                <span style={{color:DIM,fontSize:18}}>›</span>
+              </button>
+              <button onClick={()=>setEventOpen(true)} style={{background:GRAY,border:`1px solid ${GRAY2}`,borderRadius:10,padding:'14px 16px',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',justifyContent:'space-between',color:WHITE}}>
+                <div style={{display:'flex',alignItems:'center',gap:10}}><span style={{fontSize:20}}>🏟️</span><span style={{fontSize:14,fontWeight:700}}>Facility Event</span></div>
+                <span style={{color:DIM,fontSize:18}}>›</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── SESSION TYPE PICKER MODAL ── */}
+        <Modal open={sessionTypeModal} onClose={()=>setSessionTypeModal(false)} title="Add Session">
+          <div style={{display:'flex',gap:12,marginTop:8}}>
+            <button onClick={()=>{setSessionTypeModal(false);setSoloF({...blankSolo,date:dateKey(opsDate),coachId:eligibleCoaches(['solo','mixed'])[0]?.id||''});setSoloOpen(true)}}
+              style={{flex:1,background:GRAY2,border:`1px solid ${BLUE}`,borderRadius:10,padding:'20px 10px',cursor:'pointer',fontFamily:'inherit',color:WHITE,display:'flex',flexDirection:'column',alignItems:'center',gap:8}}>
+              <span style={{fontSize:28}}>👤</span>
+              <span style={{fontSize:13,fontWeight:800,color:BLUE}}>1-on-1</span>
+            </button>
+            <button onClick={()=>{setSessionTypeModal(false);setGroupF({...blankGroup,coachId:eligibleCoaches(['group','mixed'])[0]?.id||''});setGroupOpen(true)}}
+              style={{flex:1,background:GRAY2,border:`1px solid ${GOLD}`,borderRadius:10,padding:'20px 10px',cursor:'pointer',fontFamily:'inherit',color:WHITE,display:'flex',flexDirection:'column',alignItems:'center',gap:8}}>
+              <span style={{fontSize:28}}>👥</span>
+              <span style={{fontSize:13,fontWeight:800,color:GOLD}}>Group</span>
+            </button>
+          </div>
+        </Modal>
 
         <SoloModal open={soloOpen} onClose={()=>setSoloOpen(false)} form={soloF} setForm={setSoloF} coaches={eligibleCoaches(['solo','mixed'])} onSave={saveSolo}/>
         <GroupModal open={groupOpen} onClose={()=>setGroupOpen(false)} form={groupF} setForm={setGroupF} coaches={eligibleCoaches(['group','mixed'])} onSave={saveGroup}/>
@@ -825,7 +969,7 @@ export default function App(){
           {editCoach&&(
             <div style={{background:GRAY2,borderRadius:8,padding:'14px',marginBottom:16,border:`1px solid ${GOLD}`}}>
               <div style={{fontSize:12,fontWeight:700,color:GOLD,marginBottom:10}}>Reset PIN for {editCoach.name}</div>
-              <PinPad value={editCoachPin} onChange={setEditCoachPin} maxLen={6}/>
+              <PinPad value={editCoachPin} onChange={setEditCoachPin} maxLen={4}/>
               <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:12}}>
                 <Btn outline onClick={()=>setEditCoach(null)}>Cancel</Btn>
                 <Btn gold onClick={updateCoachPin}>Save PIN</Btn>
@@ -845,8 +989,8 @@ export default function App(){
               Admin (can access Ops view)
             </label>
             <div style={{marginBottom:14}}>
-              <div style={{fontSize:11,color:DIM,marginBottom:8}}>Set PIN (min 4 digits)</div>
-              <PinPad value={newCoach.pin} onChange={v=>setNewCoach(n=>({...n,pin:v}))} maxLen={6}/>
+              <div style={{fontSize:11,color:DIM,marginBottom:8}}>Set PIN (4 digits)</div>
+              <PinPad value={newCoach.pin} onChange={v=>setNewCoach(n=>({...n,pin:v}))} maxLen={4}/>
             </div>
             <Btn gold onClick={addCoach} style={{width:'100%',padding:10}}>Add Coach</Btn>
           </div>
@@ -876,6 +1020,7 @@ export default function App(){
             <div style={{fontSize:10,fontWeight:700,letterSpacing:1.5,textTransform:'uppercase',color:DIM,marginBottom:10}}>Currently Unavailable</div>
             {Object.entries(availability).flatMap(([cId,dates])=>Object.entries(dates).filter(([,v])=>v).map(([dk])=>{
               const coach=coaches.find(c=>c.id===cId)
+              return(<div key={cId+dk} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 10px',background:GRAY2,borderRadius:6,marginBottom:5}}>
               return(<div key={cId+dk} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 10px',background:GRAY2,borderRadius:6,marginBottom:5}}>
                 <span style={{fontSize:12}}>{coach?.name||'Unknown'} · {dk}</span>
                 <button onClick={async()=>{await remove(ref(db,`availability/${cId}/${dk}`));setToast('Removed')}} style={{background:'transparent',border:'none',color:DIM,cursor:'pointer',fontSize:14}}>×</button>
@@ -936,10 +1081,13 @@ export default function App(){
           <div style={{display:'flex',justifyContent:'flex-end',marginTop:16}}><Btn outline onClick={()=>setTimeOffOpen(false)}>Close</Btn></div>
         </Modal>
 
+        <OpsBottomNav tab={opsTab} setTab={setOpsTab} pendingCount={pendingTimeOff.length}/>
         <Toast msg={toast}/>
       </div>
     )
   }
+
+  // ── COACH VIEW ────────────────────────────────────────────────────
 
   // ── COACH VIEW ────────────────────────────────────────────────────
   if(view==='coach'&&loggedInCoach){
