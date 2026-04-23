@@ -344,7 +344,12 @@ export default function App(){
   const[sessionTypeModal,setSessionTypeModal]=useState(false)
   const[opsCalMonth,setOpsCalMonth]=useState({year:new Date().getFullYear(),month:new Date().getMonth()})
   const[opsSelDay,setOpsSelDay]=useState(null)
-  const[coachCalView,setCoachCalView]=useState('list')
+  const[coachCalView,setCoachCalView]=useState('day')
+  const[coachDayDate,setCoachDayDate]=useState(todayMidnight())
+  const[shifts,setShifts]=useState([])
+  const[shiftClaimModal,setShiftClaimModal]=useState(null)
+  const[shiftMgmtOpen,setShiftMgmtOpen]=useState(false)
+  const[newShift,setNewShift]=useState({title:'',date:'',time:'',duration:'',notes:''})
   const[coachCalMonth,setCoachCalMonth]=useState({year:new Date().getFullYear(),month:new Date().getMonth()})
   const[coachSelDay,setCoachSelDay]=useState(null)
   const[facCalMonth,setFacCalMonth]=useState({year:new Date().getFullYear(),month:new Date().getMonth()})
@@ -382,7 +387,7 @@ export default function App(){
   const chatEndRef=useRef(null)
 
   useEffect(()=>{
-    let d=[false,false,false,false,false,false,false]
+    let d=[false,false,false,false,false,false,false,false]
     const check=()=>{if(d.every(Boolean))setLoading(false)}
     const u1=onValue(ref(db,'coaches'),s=>{setCoaches(objToArr(s.val()));d[0]=true;check()})
     const u2=onValue(ref(db,'sessions'),s=>{setSessions(objToArr(s.val()));d[1]=true;check()})
@@ -391,7 +396,8 @@ export default function App(){
     const u5=onValue(ref(db,'availability'),s=>{setAvailability(s.val()||{});d[4]=true;check()})
     const u6=onValue(ref(db,'chat'),s=>{setMessages(objToArr(s.val()).sort((a,b)=>a.ts-b.ts));d[5]=true;check()})
     const u7=onValue(ref(db,'timeOff'),s=>{setTimeOffRequests(objToArr(s.val()));d[6]=true;check()})
-    return()=>{u1();u2();u3();u4();u5();u6();u7()}
+    const u8=onValue(ref(db,'shifts'),s=>{setShifts(objToArr(s.val()));d[7]=true;check()})
+    return()=>{u1();u2();u3();u4();u5();u6();u7();u8()}
   },[])
 
   useEffect(()=>{if(!toast)return;const t=setTimeout(()=>setToast(''),2400);return()=>clearTimeout(t)},[toast])
@@ -900,6 +906,15 @@ export default function App(){
                 <div style={{display:'flex',alignItems:'center',gap:10}}><span style={{fontSize:20}}>🏟️</span><span style={{fontSize:14,fontWeight:700}}>Facility Event</span></div>
                 <span style={{color:DIM,fontSize:18}}>›</span>
               </button>
+              <button onClick={()=>setShiftMgmtOpen(true)} style={{background:GRAY,border:`1px solid ${GRAY2}`,borderRadius:10,padding:'14px 16px',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',justifyContent:'space-between',color:WHITE}}>
+                <div style={{display:'flex',alignItems:'center',gap:10}}>
+                  <span style={{fontSize:20}}>🟡</span>
+                  <span style={{fontSize:14,fontWeight:700}}>Available Shifts</span>
+                  {shifts.some(s=>s.claimRequests&&Object.keys(s.claimRequests).length>0&&!s.claimedBy)&&
+                    <span style={{background:ORANGE,color:BLACK,fontSize:9,fontWeight:900,padding:'1px 6px',borderRadius:10}}>!</span>}
+                </div>
+                <span style={{color:DIM,fontSize:18}}>›</span>
+              </button>
             </div>
           </div>
         )}
@@ -1084,6 +1099,81 @@ export default function App(){
           <div style={{display:'flex',justifyContent:'flex-end',marginTop:16}}><Btn outline onClick={()=>setTimeOffOpen(false)}>Close</Btn></div>
         </Modal>
 
+        <Modal open={shiftMgmtOpen} onClose={()=>setShiftMgmtOpen(false)} title="Available Shifts" wide>
+          {/* Pending claims */}
+          {shifts.filter(s=>s.claimRequests&&Object.keys(s.claimRequests).length>0&&!s.claimedBy).length>0&&(
+            <div style={{marginBottom:20}}>
+              <div style={{fontSize:10,fontWeight:800,letterSpacing:1.5,textTransform:'uppercase',color:ORANGE,marginBottom:10}}>Pending Claims</div>
+              {shifts.filter(s=>s.claimRequests&&Object.keys(s.claimRequests).length>0&&!s.claimedBy).map(s=>(
+                Object.entries(s.claimRequests).map(([coachId,req])=>(
+                  <div key={s.id+coachId} style={{background:GRAY2,borderRadius:8,padding:'12px 14px',marginBottom:8,border:`1px solid rgba(255,183,77,0.3)`}}>
+                    <div style={{fontWeight:700,fontSize:13,marginBottom:2}}>{req.coachName} → {s.title}</div>
+                    <div style={{fontSize:11,color:DIM,marginBottom:10}}>{s.date} · {fmt12(s.time)}</div>
+                    <div style={{display:'flex',gap:8}}>
+                      <Btn gold onClick={async()=>{
+                        await set(ref(db,`shifts/${s.id}/claimedBy`),coachId)
+                        await set(ref(db,`shifts/${s.id}/claimRequests`),null)
+                        notifyCoach(coachId,'Shift Confirmed ✅',`You've been confirmed for: ${s.title} on ${s.date}`,db)
+                        setToast('Shift assigned ✓')
+                      }} style={{fontSize:11,padding:'5px 12px'}}>Approve</Btn>
+                      <Btn danger onClick={async()=>{
+                        await set(ref(db,`shifts/${s.id}/claimRequests/${coachId}`),null)
+                        notifyCoach(coachId,'Shift Update','Your claim request was not approved.',db)
+                        setToast('Claim denied')
+                      }} style={{fontSize:11,padding:'5px 12px'}}>Deny</Btn>
+                    </div>
+                  </div>
+                ))
+              ))}
+            </div>
+          )}
+
+          {/* Active shifts */}
+          {shifts.filter(s=>new Date(s.date+'T00:00:00')>=todayMidnight()).length>0&&(
+            <div style={{marginBottom:20}}>
+              <div style={{fontSize:10,fontWeight:800,letterSpacing:1.5,textTransform:'uppercase',color:DIM,marginBottom:10}}>Posted Shifts</div>
+              {shifts.filter(s=>new Date(s.date+'T00:00:00')>=todayMidnight()).sort((a,b)=>a.date>b.date?1:-1).map(s=>(
+                <div key={s.id} style={{background:GRAY2,borderRadius:8,padding:'12px 14px',marginBottom:8,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                  <div>
+                    <div style={{fontWeight:700,fontSize:13}}>{s.title}</div>
+                    <div style={{fontSize:11,color:DIM,marginTop:2}}>{s.date} · {fmt12(s.time)}{s.claimedBy?` · ✅ ${coaches.find(c=>c.id===s.claimedBy)?.name||'Claimed'}':' · Open'}</div>
+                  </div>
+                  <button onClick={async()=>{await remove(ref(db,`shifts/${s.id}`));setToast('Shift removed')}}
+                    style={{background:'transparent',border:'none',color:GRAY3,cursor:'pointer',fontSize:18}}
+                    onMouseEnter={e=>e.target.style.color=RED} onMouseLeave={e=>e.target.style.color=GRAY3}>×</button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Post new shift */}
+          <div style={{borderTop:`1px solid ${GRAY3}`,paddingTop:16}}>
+            <div style={{fontSize:10,fontWeight:700,letterSpacing:1.5,textTransform:'uppercase',color:DIM,marginBottom:12}}>Post New Shift</div>
+            <Field label="Title *"><input style={inp} placeholder="e.g. Birthday Party, League Game" value={newShift.title} onChange={e=>setNewShift(f=>({...f,title:e.target.value}))}/></Field>
+            <Field label="Date *"><input type="date" style={inp} value={newShift.date} onChange={e=>setNewShift(f=>({...f,date:e.target.value}))}/></Field>
+            <Field label="Time *"><input type="time" style={inp} value={newShift.time} onChange={e=>setNewShift(f=>({...f,time:e.target.value}))}/></Field>
+            <Field label="Duration">
+              <select style={inp} value={newShift.duration} onChange={e=>setNewShift(f=>({...f,duration:e.target.value}))}>
+                <option value="">—</option>
+                <option value="60">60 min</option>
+                <option value="90">90 min</option>
+                <option value="120">120 min</option>
+                <option value="180">3 hours</option>
+              </select>
+            </Field>
+            <Field label="Notes"><input style={inp} placeholder="Any extra details" value={newShift.notes} onChange={e=>setNewShift(f=>({...f,notes:e.target.value}))}/></Field>
+            <div style={{display:'flex',gap:10,justifyContent:'flex-end',marginTop:16}}>
+              <Btn outline onClick={()=>setShiftMgmtOpen(false)}>Done</Btn>
+              <Btn gold onClick={async()=>{
+                if(!newShift.title||!newShift.date||!newShift.time){setToast('Fill in required fields');return}
+                await push(ref(db,'shifts'),{...newShift,createdAt:Date.now()})
+                setNewShift({title:'',date:'',time:'',duration:'',notes:''})
+                setToast('Shift posted ✓')
+              }}>Post Shift</Btn>
+            </div>
+          </div>
+        </Modal>
+
         <OpsBottomNav tab={opsTab} setTab={setOpsTab} pendingCount={pendingTimeOff.length}/>
         <Toast msg={toast}/>
       </div>
@@ -1115,12 +1205,46 @@ export default function App(){
         {/* ── SCHEDULE ── */}
         {coachTab==='schedule'&&(
           <div style={{flex:1,overflowY:'auto'}}>
-            <div style={{padding:'12px 16px 8px',display:'flex',gap:6}}>
-              <button onClick={()=>setCoachCalView('list')} style={{background:coachCalView==='list'?GOLD:GRAY2,border:`1px solid ${coachCalView==='list'?GOLD:GRAY3}`,color:coachCalView==='list'?BLACK:WHITE,fontSize:11,fontWeight:700,padding:'6px 12px',borderRadius:20,cursor:'pointer',fontFamily:'inherit'}}>☰ List</button>
-              <button onClick={()=>setCoachCalView('calendar')} style={{background:coachCalView==='calendar'?GOLD:GRAY2,border:`1px solid ${coachCalView==='calendar'?GOLD:GRAY3}`,color:coachCalView==='calendar'?BLACK:WHITE,fontSize:11,fontWeight:700,padding:'6px 12px',borderRadius:20,cursor:'pointer',fontFamily:'inherit'}}>📅 Calendar</button>
+            <div style={{padding:'12px 16px 8px',display:'flex',gap:8,alignItems:'center'}}>
+              <select value={coachCalView} onChange={e=>setCoachCalView(e.target.value)}
+                style={{...inp,fontSize:12,padding:'6px 10px',width:'auto',minWidth:130}}>
+                <option value="day">📅 Day</option>
+                <option value="week">☰ Week</option>
+                <option value="month">🗓 Month</option>
+              </select>
+              {coachCalView==='day'&&(
+                <div style={{display:'flex',alignItems:'center',gap:6,flex:1,justifyContent:'flex-end'}}>
+                  <NavBtn onClick={()=>{const d=new Date(coachDayDate);d.setDate(d.getDate()-1);setCoachDayDate(d)}}>‹</NavBtn>
+                  <span style={{fontSize:12,fontWeight:800,textTransform:'uppercase'}}>{isToday(coachDayDate)?'Today':fmtLong(coachDayDate)}</span>
+                  <NavBtn onClick={()=>{const d=new Date(coachDayDate);d.setDate(d.getDate()+1);setCoachDayDate(d)}}>›</NavBtn>
+                  {!isToday(coachDayDate)&&<Btn outline onClick={()=>setCoachDayDate(todayMidnight())} style={{fontSize:10,padding:'4px 8px'}}>Today</Btn>}
+                </div>
+              )}
             </div>
             <div style={{padding:'0 16px 16px'}}>
-              {loading?<Spinner/>:coachCalView==='list'
+              {loading?<Spinner/>:coachCalView==='day'?(()=>{
+                const sess=getSessionsForCoach(loggedInCoach.id,coachDayDate)
+                const unavail=!isCoachAvailable(loggedInCoach.id,coachDayDate)
+                return(<>
+                  {unavail&&<div style={{background:'rgba(255,183,77,0.1)',border:`1px solid rgba(255,183,77,0.3)`,borderRadius:8,padding:'10px 14px',marginBottom:12,fontSize:12,color:ORANGE,fontWeight:700}}>You are marked unavailable this day</div>}
+                  {sess.length===0
+                    ?<div style={{textAlign:'center',padding:'60px 20px',color:DIM}}>{unavail?'Unavailable':'No sessions today'}</div>
+                    :sess.map(s=>(
+                      <div key={s.id} style={{background:GRAY,borderRadius:9,padding:'14px 16px',marginBottom:10,borderLeft:`3px solid ${s.type==='solo'?BLUE:GOLD}`,display:'flex',alignItems:'flex-start',gap:14}}>
+                        <div style={{minWidth:64}}>
+                          <div style={{fontSize:20,fontWeight:900,lineHeight:1}}>{fmt12(s.time)}</div>
+                          <div style={{fontSize:10,color:DIM,marginTop:3}}>{s.duration}min</div>
+                        </div>
+                        <div style={{flex:1}}>
+                          <div style={{fontSize:15,fontWeight:700,marginBottom:3}}>{s.type==='solo'?`1-on-1 · ${s.clientName}`:s.name}</div>
+                          <div style={{fontSize:11,color:DIM}}>{s.type==='solo'?(s.notes||'No notes'):`Group · ${s.duration}min`}</div>
+                        </div>
+                      </div>
+                    ))
+                  }
+                </>)
+              })()
+              :coachCalView==='week'
                 ?getNext7().map(day=>{
                   const sess=getSessionsForCoach(loggedInCoach.id,day)
                   const today=isToday(day),unavail=!isCoachAvailable(loggedInCoach.id,day)
@@ -1215,6 +1339,63 @@ export default function App(){
                 </div>)
               })}
             </div>
+
+            {/* ── AVAILABLE SHIFTS ── */}
+            {shifts.filter(s=>!s.claimedBy&&new Date(s.date+'T00:00:00')>=todayMidnight()).length>0&&(
+              <div style={{marginTop:24}}>
+                <div style={{fontSize:10,fontWeight:800,letterSpacing:2,textTransform:'uppercase',color:ORANGE,marginBottom:10}}>🟡 Available Shifts</div>
+                {shifts.filter(s=>!s.claimedBy&&new Date(s.date+'T00:00:00')>=todayMidnight()).sort((a,b)=>a.date>b.date?1:-1).map(s=>{
+                  const myPending=s.claimRequests&&s.claimRequests[loggedInCoach.id]
+                  return(
+                    <div key={s.id} style={{background:GRAY,borderRadius:10,padding:'14px 16px',marginBottom:10,border:`1px solid rgba(255,183,77,0.3)`}}>
+                      <div style={{fontSize:15,fontWeight:800,marginBottom:4}}>{s.title}</div>
+                      <div style={{fontSize:12,color:DIM,marginBottom:10}}>{s.date} · {fmt12(s.time)}{s.duration?` · ${s.duration}min`:''}{s.notes?` · ${s.notes}`:''}</div>
+                      {myPending
+                        ?<div style={{fontSize:12,color:ORANGE,fontWeight:700}}>⏳ Claim request sent — waiting for approval</div>
+                        :<Btn gold onClick={()=>setShiftClaimModal(s)} style={{fontSize:12,padding:'8px 16px'}}>Claim Shift</Btn>
+                      }
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* ── MY CLAIMED SHIFTS ── */}
+            {shifts.filter(s=>s.claimedBy===loggedInCoach.id).length>0&&(
+              <div style={{marginTop:24}}>
+                <div style={{fontSize:10,fontWeight:800,letterSpacing:2,textTransform:'uppercase',color:GREEN,marginBottom:10}}>✅ My Shifts</div>
+                {shifts.filter(s=>s.claimedBy===loggedInCoach.id).sort((a,b)=>a.date>b.date?1:-1).map(s=>(
+                  <div key={s.id} style={{background:GRAY,borderRadius:10,padding:'14px 16px',marginBottom:10,border:`1px solid rgba(129,199,132,0.3)`}}>
+                    <div style={{fontSize:15,fontWeight:800,marginBottom:4}}>{s.title}</div>
+                    <div style={{fontSize:12,color:DIM}}>{s.date} · {fmt12(s.time)}{s.duration?` · ${s.duration}min`:''}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* CLAIM MODAL */}
+            <Modal open={!!shiftClaimModal} onClose={()=>setShiftClaimModal(null)} title="Claim Shift">
+              {shiftClaimModal&&(
+                <>
+                  <div style={{fontSize:14,fontWeight:700,marginBottom:6}}>{shiftClaimModal.title}</div>
+                  <div style={{fontSize:12,color:DIM,marginBottom:16}}>{shiftClaimModal.date} · {fmt12(shiftClaimModal.time)}</div>
+                  <p style={{fontSize:12,color:DIM,marginBottom:20}}>Send a claim request to ops. They'll confirm and you'll be notified.</p>
+                  <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
+                    <Btn outline onClick={()=>setShiftClaimModal(null)}>Cancel</Btn>
+                    <Btn gold onClick={async()=>{
+                      await set(ref(db,`shifts/${shiftClaimModal.id}/claimRequests/${loggedInCoach.id}`),{
+                        coachName:loggedInCoach.name,
+                        requestedAt:Date.now()
+                      })
+                      const adminTokens=coaches.filter(c=>c.isAdmin).map(c=>c.id)
+                      adminTokens.forEach(id=>notifyCoach(id,'Shift Claim Request',`${loggedInCoach.name} wants to claim: ${shiftClaimModal.title}`,db))
+                      setShiftClaimModal(null)
+                      setToast('Claim request sent ✓')
+                    }}>Send Claim Request</Btn>
+                  </div>
+                </>
+              )}
+            </Modal>
           </div>
         )}
 
