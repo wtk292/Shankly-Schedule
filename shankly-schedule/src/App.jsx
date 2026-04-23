@@ -194,7 +194,7 @@ function BottomNav({tab,setTab,isAdmin,onOps}){
     {id:'timeoff',icon:'🌴',label:'Time Off'},
   ]
   return(
-    <div style={{position:'fixed',bottom:0,left:0,right:0,zIndex:50,background:'#111',borderTop:`1px solid ${GRAY3}`,display:'flex',alignItems:'stretch',paddingBottom:'env(safe-area-inset-bottom)'}}>
+    <div style={{position:'fixed',bottom:0,left:0,right:0,zIndex:50,background:'#111',borderTop:`1px solid ${GRAY3}`,display:'flex',alignItems:'stretch',paddingBottom:'calc(env(safe-area-inset-bottom) + 4px)'}}>
       {tabs.map(t=>(
         <button key={t.id} onClick={()=>setTab(t.id)} style={{flex:1,background:'transparent',border:'none',cursor:'pointer',padding:'8px 4px 6px',display:'flex',flexDirection:'column',alignItems:'center',gap:3,transition:'all 0.15s',fontFamily:'inherit'}}>
           <span style={{fontSize:20}}>{t.icon}</span>
@@ -220,7 +220,7 @@ function OpsBottomNav({tab,setTab,pendingCount}){
     {id:'manage',icon:'⚙️',label:'Manage'},
   ]
   return(
-    <div style={{position:'fixed',bottom:0,left:0,right:0,zIndex:50,background:'#111',borderTop:`1px solid ${GRAY3}`,display:'flex',alignItems:'stretch',paddingBottom:'env(safe-area-inset-bottom)'}}>
+    <div style={{position:'fixed',bottom:0,left:0,right:0,zIndex:50,background:'#111',borderTop:`1px solid ${GRAY3}`,display:'flex',alignItems:'stretch',paddingBottom:'calc(env(safe-area-inset-bottom) + 4px)'}}>
       {tabs.map(t=>(
         <button key={t.id} onClick={()=>setTab(t.id)} style={{flex:1,background:'transparent',border:'none',cursor:'pointer',padding:'8px 4px 6px',display:'flex',flexDirection:'column',alignItems:'center',gap:3,transition:'all 0.15s',fontFamily:'inherit',position:'relative'}}>
           <span style={{fontSize:20}}>{t.icon}</span>
@@ -647,7 +647,7 @@ export default function App(){
     const pendingCount=pendingTimeOff.length
     if(!opsTab)setOpsTab('schedule')
     return(
-      <div style={{...PAGE,paddingBottom:68}}>
+      <div style={{...PAGE,paddingBottom:'calc(72px + env(safe-area-inset-bottom))'}}>
         {/* ── OPS HEADER ── */}
         <div style={{background:BLACK,borderBottom:`1px solid rgba(245,197,24,0.18)`,padding:'12px 16px',position:'sticky',top:0,zIndex:50}}>
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
@@ -656,22 +656,21 @@ export default function App(){
               <span style={{fontSize:16,fontWeight:900,letterSpacing:2,textTransform:'uppercase',color:GOLD}}>Ops</span>
             </div>
             <div style={{display:'flex',gap:8,alignItems:'center'}}>
-              {opsTab==='schedule'&&(
-                <div style={{display:'flex',alignItems:'center',gap:6}}>
-                  <NavBtn onClick={()=>{const d=new Date(opsDate);d.setDate(d.getDate()-1);setOpsDate(d)}}>‹</NavBtn>
-                  <span style={{fontSize:12,fontWeight:800,textTransform:'uppercase'}}>{fmtLong(opsDate)}</span>
-                  <NavBtn onClick={()=>{const d=new Date(opsDate);d.setDate(d.getDate()+1);setOpsDate(d)}}>›</NavBtn>
-                </div>
-              )}
-              <Btn gold onClick={()=>{
-                setSessionTypeModal(true)
-              }} style={{fontSize:12,padding:'8px 14px'}}>+ Session</Btn>
+              <Btn gold onClick={()=>setSessionTypeModal(true)} style={{fontSize:12,padding:'8px 14px'}}>+ Session</Btn>
               {loggedInCoach
                 ?<Btn outline onClick={()=>setView('coach')} style={{fontSize:11}}>← Me</Btn>
                 :<button onClick={()=>setView('landing')} style={{background:'transparent',border:`1px solid ${GRAY3}`,color:DIM,fontSize:11,padding:'5px 10px',borderRadius:6,cursor:'pointer',fontFamily:'inherit'}}>Log Out</button>
               }
             </div>
           </div>
+          {opsTab==='schedule'&&(
+            <div style={{display:'flex',alignItems:'center',gap:8,marginTop:10}}>
+              <NavBtn onClick={()=>{const d=new Date(opsDate);d.setDate(d.getDate()-1);setOpsDate(d)}}>‹</NavBtn>
+              <span style={{fontSize:13,fontWeight:800,textTransform:'uppercase',flex:1,textAlign:'center'}}>{fmtLong(opsDate)}{isToday(opsDate)&&<span style={{background:GOLD,color:BLACK,fontSize:9,fontWeight:800,letterSpacing:1.5,textTransform:'uppercase',padding:'2px 7px',borderRadius:20,marginLeft:8}}>Today</span>}</span>
+              <NavBtn onClick={()=>{const d=new Date(opsDate);d.setDate(d.getDate()+1);setOpsDate(d)}}>›</NavBtn>
+              <Btn outline onClick={()=>setOpsDate(todayMidnight())} style={{fontSize:10,padding:'5px 10px'}}>Today</Btn>
+            </div>
+          )}
         </div>
 
         {/* ── ANNOUNCEMENT BANNER ── */}
@@ -694,9 +693,6 @@ export default function App(){
                 <option value="list">☰ List View</option>
                 <option value="calendar">📅 Calendar</option>
               </select>
-              {opsCalView==='list'&&(
-                <Btn outline onClick={()=>setOpsDate(todayMidnight())} style={{fontSize:10,padding:'5px 10px'}}>Today</Btn>
-              )}
               {opsCalView==='calendar'&&(
                 <div style={{display:'flex',alignItems:'center',gap:8,marginLeft:'auto'}}>
                   <NavBtn onClick={()=>changeMonth(opsCalMonth,-1,setOpsCalMonth)}>‹</NavBtn>
@@ -1091,7 +1087,7 @@ export default function App(){
   // ── COACH VIEW ────────────────────────────────────────────────────
   if(view==='coach'&&loggedInCoach){
     return(
-      <div style={{...PAGE,display:'flex',flexDirection:'column',paddingBottom:68}}>
+      <div style={{...PAGE,display:'flex',flexDirection:'column',paddingBottom:'calc(72px + env(safe-area-inset-bottom))'}}>
         {/* Slim header */}
         <div style={{background:BLACK,borderBottom:`1px solid rgba(245,197,24,0.15)`,padding:'10px 16px',position:'sticky',top:0,zIndex:50,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
           <div style={{display:'flex',alignItems:'center',gap:10}}>
@@ -1329,3 +1325,4 @@ export default function App(){
 
   return null
 }
+
