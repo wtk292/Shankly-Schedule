@@ -578,6 +578,14 @@ export default function App(){
   }
   useEffect(()=>{if(pinVal.length>=4&&view==='pin'){checkPin(pinVal)}},[pinVal,coaches])
 
+  // Clear iOS badge when app is opened
+  useEffect(()=>{
+    if('setAppBadge' in navigator){
+      navigator.setAppBadge(0).catch(()=>{})
+    }
+  },[])
+
+
   // Restore session from localStorage once data is fully loaded
   useEffect(()=>{
     if(loading)return  // wait until Firebase data is fully loaded
@@ -1325,4 +1333,5 @@ export default function App(){
 
   return null
 }
+
 
