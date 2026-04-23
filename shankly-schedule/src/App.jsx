@@ -394,7 +394,11 @@ export default function App(){
     const u3=onValue(ref(db,'facEvents'),s=>{setEvents(objToArr(s.val()));d[2]=true;check()})
     const u4=onValue(ref(db,'announcement'),s=>{setAnnouncement(s.val());d[3]=true;check()})
     const u5=onValue(ref(db,'availability'),s=>{setAvailability(s.val()||{});d[4]=true;check()})
-    const u6=onValue(ref(db,'chat'),s=>{setMessages(objToArr(s.val()).sort((a,b)=>a.ts-b.ts));d[5]=true;check()})
+    const u6=onValue(ref(db,'chat'),s=>{
+      const arr=objToArr(s.val()).sort((a,b)=>a.ts-b.ts)
+      const seen=new Set();const deduped=arr.filter(m=>{if(seen.has(m.id))return false;seen.add(m.id);return true})
+      setMessages(deduped);d[5]=true;check()
+    })
     const u7=onValue(ref(db,'timeOff'),s=>{setTimeOffRequests(objToArr(s.val()));d[6]=true;check()})
     const u8=onValue(ref(db,'shifts'),s=>{setShifts(objToArr(s.val()));d[7]=true;check()})
     return()=>{u1();u2();u3();u4();u5();u6();u7();u8()}
@@ -529,8 +533,12 @@ export default function App(){
   }
   async function sendMessage(){
     if(!chatMsg.trim()||!loggedInCoach)return
-    await push(ref(db,'chat'),{coachId:loggedInCoach.id,coachName:loggedInCoach.name,text:chatMsg.trim(),ts:Date.now()})
+    const text=chatMsg.trim()
+    await push(ref(db,'chat'),{coachId:loggedInCoach.id,coachName:loggedInCoach.name,text,ts:Date.now()})
     setChatMsg('')
+    // Notify all coaches except sender
+    const others=coaches.filter(c=>c.id!==loggedInCoach.id)
+    others.forEach(c=>notifyCoach(c.id,'💬 '+loggedInCoach.name,text,db))
   }
   async function submitTimeOffRequest(){
     if(!timeOffReqF.startDate||!timeOffReqF.endDate){setToast('Select start and end dates');return}
