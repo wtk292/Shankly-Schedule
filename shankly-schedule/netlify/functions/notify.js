@@ -6,7 +6,7 @@ exports.handler = async function(event) {
   }
  
   try {
-    const { token, title, body } = JSON.parse(event.body)
+    const { token, title, body, badge } = JSON.parse(event.body)
  
     if (!token || !title || !body) {
       return { statusCode: 400, body: 'Missing required fields' }
@@ -35,6 +35,14 @@ exports.handler = async function(event) {
           message: {
             token,
             notification: { title, body },
+            apns: {
+              payload: {
+                aps: {
+                  badge: badge || 1,
+                  sound: 'default'
+                }
+              }
+            },
             webpush: {
               notification: {
                 title,
@@ -68,4 +76,3 @@ exports.handler = async function(event) {
     return { statusCode: 500, body: err.message }
   }
 }
- 
