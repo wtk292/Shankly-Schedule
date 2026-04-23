@@ -1167,6 +1167,7 @@ export default function App(){
               <Btn gold onClick={async()=>{
                 if(!newShift.title||!newShift.date||!newShift.time){setToast('Fill in required fields');return}
                 await push(ref(db,'shifts'),{...newShift,createdAt:Date.now()})
+                notifyAllCoaches('🟡 New Shift Available',`${newShift.title} · ${newShift.date} at ${fmt12(newShift.time)}`,db)
                 setNewShift({title:'',date:'',time:'',duration:'',notes:''})
                 setToast('Shift posted ✓')
               }}>Post Shift</Btn>
@@ -1514,6 +1515,7 @@ export default function App(){
 
   return null
 }
+
 
 
 
