@@ -159,7 +159,7 @@ function MonthCalendar({year,month,onDayClick,getDayDots,selectedDay}){
   )
 }
 
-function PinPad({value,onChange,maxLen={4}}){
+function PinPad({value,onChange,maxLen=4}){
   const digits=['1','2','3','4','5','6','7','8','9','','0','⌫']
   return(
     <div>
@@ -1330,3 +1330,4 @@ export default function App(){
 
   return null
 }
+
