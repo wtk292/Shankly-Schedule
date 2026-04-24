@@ -30,14 +30,20 @@ async function notifyCoach(coachId, title, body, db) {
   }
 }
 
-async function notifyAllCoaches(title, body, db) {
+async function notifyAllCoaches(title, body, db, excludeIds=[]) {
   try {
     const snap = await new Promise(resolve => {
       const unsub = onValue(ref(db, 'fcmTokens'), s => { unsub(); resolve(s) })
     })
     const tokens = snap.val()
     if (!tokens) return
-    await Promise.all(Object.values(tokens).map(token => sendNotification(token, title, body)))
+    // Deduplicate tokens and exclude specified coach IDs
+    const seen = new Set()
+    const unique = Object.entries(tokens)
+      .filter(([id]) => !excludeIds.includes(id))
+      .map(([,token]) => token)
+      .filter(token => { if(seen.has(token))return false; seen.add(token); return true })
+    await Promise.all(unique.map(token => sendNotification(token, title, body)))
   } catch (err) {
     console.error('notifyAllCoaches error:', err)
   }
@@ -191,19 +197,22 @@ function PinPad({value,onChange,maxLen=4}){
   )
 }
 
-function BottomNav({tab,setTab,isAdmin,onOps}){
+function BottomNav({tab,setTab,isAdmin,onOps,chatBadge=0,scheduleBadge=0,facilityBadge=0,timeoffBadge=0}){
   const tabs=[
-    {id:'schedule',icon:ICON_SCHEDULE,label:'Schedule'},
-    {id:'facility',icon:ICON_FACILITY,label:'Facility'},
-    {id:'summary',icon:ICON_SUMMARY,label:'Summary'},
-    {id:'chat',icon:ICON_CHAT,label:'Chat'},
-    {id:'timeoff',icon:ICON_TIMEOFF,label:'Time Off'},
+    {id:'schedule',icon:ICON_SCHEDULE,label:'Schedule',badge:scheduleBadge},
+    {id:'facility',icon:ICON_FACILITY,label:'Facility',badge:facilityBadge},
+    {id:'summary',icon:ICON_SUMMARY,label:'Summary',badge:0},
+    {id:'chat',icon:ICON_CHAT,label:'Chat',badge:chatBadge},
+    {id:'timeoff',icon:ICON_TIMEOFF,label:'Time Off',badge:timeoffBadge},
   ]
   return(
     <div style={{position:'fixed',bottom:0,left:0,right:0,zIndex:50,background:'#111',borderTop:`1px solid ${GRAY3}`,display:'flex',alignItems:'stretch',paddingBottom:'calc(env(safe-area-inset-bottom) + 4px)'}}>
       {tabs.map(t=>(
-        <button key={t.id} onClick={()=>setTab(t.id)} style={{flex:1,background:'transparent',border:'none',cursor:'pointer',padding:'8px 4px 6px',display:'flex',flexDirection:'column',alignItems:'center',gap:3,transition:'all 0.15s',fontFamily:'inherit'}}>
-          <img src={t.icon} alt={t.label} style={{width:56,height:56,objectFit:'contain',opacity:tab===t.id?1:0.5}}/>
+        <button key={t.id} onClick={()=>setTab(t.id)} style={{flex:1,background:'transparent',border:'none',cursor:'pointer',padding:'8px 4px 6px',display:'flex',flexDirection:'column',alignItems:'center',gap:3,transition:'all 0.15s',fontFamily:'inherit',position:'relative'}}>
+          <div style={{position:'relative'}}>
+            <img src={t.icon} alt={t.label} style={{width:56,height:56,objectFit:'contain',opacity:tab===t.id?1:0.5}}/>
+            {t.badge>0&&<span style={{position:'absolute',top:0,right:-2,background:'red',color:WHITE,fontSize:9,fontWeight:900,minWidth:16,height:16,borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',padding:'0 4px'}}>{t.badge}</span>}
+          </div>
           <span style={{fontSize:9,fontWeight:tab===t.id?800:400,color:tab===t.id?GOLD:DIM,letterSpacing:0.3,textTransform:'uppercase'}}>{t.label}</span>
           {tab===t.id&&<div style={{width:4,height:4,borderRadius:'50%',background:GOLD,marginTop:1}}/>}
         </button>
@@ -349,6 +358,8 @@ export default function App(){
   const[opsTab,setOpsTab]=useState('schedule')
   const[sessionTypeModal,setSessionTypeModal]=useState(false)
   const[saving,setSaving]=useState(false)
+  const[lastChatRead,setLastChatRead]=useState(()=>{try{return parseInt(localStorage.getItem('lastChatRead')||'0')}catch{return 0}})
+  const[lastFacilityView,setLastFacilityView]=useState(()=>{try{return parseInt(localStorage.getItem('lastFacilityView')||'0')}catch{return 0}})
   const[opsCalMonth,setOpsCalMonth]=useState({year:new Date().getFullYear(),month:new Date().getMonth()})
   const[opsSelDay,setOpsSelDay]=useState(null)
   const[coachCalView,setCoachCalView]=useState('day')
@@ -415,6 +426,9 @@ export default function App(){
   useEffect(()=>{
     if(coachTab==='chat'){
       chatEndRef.current?.scrollIntoView({behavior:'smooth'})
+      const now=Date.now();setLastChatRead(now);try{localStorage.setItem('lastChatRead',now)}catch{}
+    } else if(coachTab==='facility'){
+      const now=Date.now();setLastFacilityView(now);try{localStorage.setItem('lastFacilityView',now)}catch{}
     } else {
       // Reset scroll to top when switching away from chat
       window.scrollTo(0,0)
@@ -541,7 +555,7 @@ export default function App(){
   async function saveAnnouncement(){
     if(!announceText.trim()){setToast('Enter a message');return}
     await set(ref(db,'announcement'),{text:announceText.trim(),ts:Date.now()})
-    notifyAllCoaches('📢 Shankly Announcement',announceText.trim(),db)
+    notifyAllCoaches('📢 Shankly Announcement',announceText.trim(),db,[loggedInCoach?.id])
     setAnnounceOpen(false);setAnnounceText('');setToast('Announcement posted ✓')
   }
   async function clearAnnouncement(){await remove(ref(db,'announcement'));setToast('Cleared')}
@@ -568,8 +582,7 @@ export default function App(){
     await push(ref(db,'chat'),{coachId:loggedInCoach.id,coachName:loggedInCoach.name,text,ts:Date.now()})
     setChatMsg('')
     // Notify all coaches except sender
-    const others=coaches.filter(c=>c.id!==loggedInCoach.id)
-    others.forEach(c=>notifyCoach(c.id,'💬 '+loggedInCoach.name,text,db))
+    notifyAllCoaches('💬 '+loggedInCoach.name,text,db,[loggedInCoach.id])
   }
   async function submitTimeOffRequest(){
     if(!timeOffReqF.startDate||!timeOffReqF.endDate){setToast('Select start and end dates');return}
@@ -1250,7 +1263,7 @@ export default function App(){
               <Btn gold onClick={async()=>{
                 if(!newShift.title||!newShift.date||!newShift.time){setToast('Fill in required fields');return}
                 await push(ref(db,'shifts'),{...newShift,createdAt:Date.now()})
-                notifyAllCoaches('🟡 New Shift Available',`${newShift.title} · ${newShift.date} at ${fmt12(newShift.time)}`,db)
+                notifyAllCoaches('🟡 New Shift Available',`${newShift.title} · ${newShift.date} at ${fmt12(newShift.time)}`,db,[loggedInCoach?.id])
                 setNewShift({title:'',date:'',time:'',duration:'',notes:''})
                 setToast('Shift posted ✓')
               }}>Post Shift</Btn>
@@ -1566,7 +1579,7 @@ export default function App(){
               }
               <div ref={chatEndRef}/>
             </div>
-            <div style={{padding:'12px 16px 16px',borderTop:`1px solid ${GRAY2}`,display:'flex',gap:10,alignItems:'center',background:GRAY}}>
+            <div style={{padding:'12px 16px',paddingBottom:'calc(16px + env(safe-area-inset-bottom))',borderTop:`1px solid ${GRAY2}`,display:'flex',gap:10,alignItems:'center',background:GRAY,flexShrink:0}}>
               <input style={{...inp,flex:1}} placeholder="Type a message..." value={chatMsg} onChange={e=>setChatMsg(e.target.value)} onKeyDown={e=>e.key==='Enter'&&!e.shiftKey&&sendMessage()}/>
               <Btn gold onClick={sendMessage} style={{padding:'10px 16px'}}>Send</Btn>
             </div>
@@ -1605,7 +1618,13 @@ export default function App(){
           </div>
         </Modal>
 
-        <BottomNav tab={coachTab} setTab={setCoachTab} isAdmin={loggedInCoach.isAdmin} onOps={()=>setView('ops')}/>
+        <BottomNav
+          tab={coachTab} setTab={setCoachTab} isAdmin={loggedInCoach.isAdmin} onOps={()=>setView('ops')}
+          chatBadge={messages.filter(m=>m.ts>lastChatRead&&m.coachId!==loggedInCoach.id).length}
+          scheduleBadge={sessions.filter(s=>s.coachId===loggedInCoach.id&&!s.confirmedBy?.[loggedInCoach.id]).length}
+          facilityBadge={shifts.filter(s=>!s.claimedBy&&new Date(s.date+'T00:00:00')>=todayMidnight()&&s.createdAt>lastFacilityView).length+events.filter(e=>new Date(e.date+'T00:00:00')>=todayMidnight()&&(e.createdAt||0)>lastFacilityView).length}
+          timeoffBadge={timeOffRequests.filter(r=>r.coachId===loggedInCoach.id&&r.status==='pending').length}
+        />
         <Toast msg={toast}/>
       </div>
     )
