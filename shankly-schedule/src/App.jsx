@@ -75,6 +75,26 @@ function roleLabel(r){return r==='group'?'Groups Only':r==='solo'?'1-on-1s Only'
 function objToArr(obj){if(!obj)return[];return Object.entries(obj).map(([id,val])=>({...val,id}))}
 function getWeekStart(){const d=todayMidnight();d.setDate(d.getDate()-d.getDay());return d}
 function getWeekEnd(){const d=getWeekStart();d.setDate(d.getDate()+6);return d}
+function parseTimeInput(raw){
+  if(!raw)return''
+  const s=raw.trim().toLowerCase().replace(/\s/g,'')
+  // Already in HH:MM format
+  if(/^\d{1,2}:\d{2}$/.test(s)){
+    const [h,m]=s.split(':').map(Number)
+    if(h>=0&&h<=23&&m>=0&&m<=59)return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`
+  }
+  // Parse formats like 5pm, 10:30am, 530pm, 1730
+  const match=s.match(/^(\d{1,2}):?(\d{2})?\s*(am|pm)?$/)
+  if(!match)return''
+  let h=parseInt(match[1])
+  const m=parseInt(match[2]||'0')
+  const period=match[3]
+  if(period==='pm'&&h!==12)h+=12
+  if(period==='am'&&h===12)h=0
+  if(h>23||m>59)return''
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`
+}
+
 function fmtTime(ts){const d=new Date(ts);return d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true})}
 function addDays(date,n){const d=new Date(date);d.setDate(d.getDate()+n);return d}
 
@@ -253,7 +273,7 @@ function SoloModal({open,onClose,form,setForm,coaches,onSave}){
     <Modal open={open} onClose={onClose} title="Assign 1-on-1">
       <Field label="Client Name *"><input style={inp} value={form.client} onChange={e=>setForm(f=>({...f,client:e.target.value}))} placeholder="e.g. Marcus Johnson"/></Field>
       <Field label="Date *"><input type="date" style={inp} value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))}/></Field>
-      <Field label="Time *"><input type="time" style={inp} value={form.time} onChange={e=>setForm(f=>({...f,time:e.target.value}))}/></Field>
+      <Field label="Time *"><input style={inp} placeholder="e.g. 5pm, 10:30am" defaultValue={form.time?fmt12(form.time):''} onBlur={e=>{const t=parseTimeInput(e.target.value);if(t){e.target.value=fmt12(t);setForm(f=>({...f,time:t}))}}} /></Field>
       <Field label="Duration">
         <select style={inp} value={form.dur} onChange={e=>setForm(f=>({...f,dur:e.target.value}))}>
           <option value="30">30 min</option><option value="60">60 min</option><option value="90">90 min</option>
@@ -290,7 +310,7 @@ function GroupModal({open,onClose,form,setForm,coaches,onSave}){
         </Field>
         :<Field label="Date *"><input type="date" style={inp} value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))}/></Field>
       }
-      <Field label="Time *"><input type="time" style={inp} value={form.time} onChange={e=>setForm(f=>({...f,time:e.target.value}))}/></Field>
+      <Field label="Time *"><input style={inp} placeholder="e.g. 5pm, 10:30am" defaultValue={form.time?fmt12(form.time):''} onBlur={e=>{const t=parseTimeInput(e.target.value);if(t){e.target.value=fmt12(t);setForm(f=>({...f,time:t}))}}} /></Field>
       <Field label="Duration">
         <select style={inp} value={form.dur} onChange={e=>setForm(f=>({...f,dur:e.target.value}))}>
           <option value="60">60 min</option><option value="90">90 min</option><option value="120">120 min</option>
@@ -315,8 +335,8 @@ function EventModal({open,onClose,form,setForm,coaches,onSave}){
     <Modal open={open} onClose={onClose} title="Add Facility Event">
       <Field label="Event Title *"><input style={inp} value={form.title} onChange={e=>setForm(f=>({...f,title:e.target.value}))} placeholder="e.g. Adult League Night"/></Field>
       <Field label="Date *"><input type="date" style={inp} value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))}/></Field>
-      <Field label="Start Time *"><input type="time" style={inp} value={form.startTime} onChange={e=>setForm(f=>({...f,startTime:e.target.value}))}/></Field>
-      <Field label="End Time"><input type="time" style={inp} value={form.endTime} onChange={e=>setForm(f=>({...f,endTime:e.target.value}))}/></Field>
+      <Field label="Start Time *"><input style={inp} placeholder="e.g. 9am, 2:30pm" defaultValue={form.startTime?fmt12(form.startTime):''} onBlur={e=>{const t=parseTimeInput(e.target.value);if(t){e.target.value=fmt12(t);setForm(f=>({...f,startTime:t}))}}} /></Field>
+      <Field label="End Time"><input style={inp} placeholder="e.g. 10am, 4:30pm" defaultValue={form.endTime?fmt12(form.endTime):''} onBlur={e=>{const t=parseTimeInput(e.target.value);if(t){e.target.value=fmt12(t);setForm(f=>({...f,endTime:t}))}}} /></Field>
       <Field label="Brand">
         <select style={inp} value={form.brand} onChange={e=>setForm(f=>({...f,brand:e.target.value}))}>
           <option value="both">Goalz + Shankly</option><option value="goalz">Goalz Only</option><option value="shankly">Shankly Only</option>
@@ -1011,7 +1031,7 @@ export default function App(){
 
         <Modal open={editOpen} onClose={()=>setEditOpen(false)} title="Edit Session">
           {editSession&&<>
-            <Field label="Time *"><input type="time" style={inp} value={editF.time||''} onChange={e=>setEditF(f=>({...f,time:e.target.value}))}/></Field>
+            <Field label="Time *"><input style={inp} placeholder="e.g. 5pm, 10:30am" defaultValue={editF.time?fmt12(editF.time):''} onBlur={e=>{const t=parseTimeInput(e.target.value);if(t){e.target.value=fmt12(t);setEditF(f=>({...f,time:t}))}}} /></Field>
             <Field label="Duration">
               <select style={inp} value={editF.dur||'60'} onChange={e=>setEditF(f=>({...f,dur:e.target.value}))}>
                 <option value="30">30 min</option><option value="60">60 min</option><option value="90">90 min</option><option value="120">120 min</option>
@@ -1257,7 +1277,7 @@ export default function App(){
             <div style={{fontSize:10,fontWeight:700,letterSpacing:1.5,textTransform:'uppercase',color:DIM,marginBottom:12}}>Post New Shift</div>
             <Field label="Title *"><input style={inp} placeholder="e.g. Birthday Party, League Game" value={newShift.title} onChange={e=>setNewShift(f=>({...f,title:e.target.value}))}/></Field>
             <Field label="Date *"><input type="date" style={inp} value={newShift.date} onChange={e=>setNewShift(f=>({...f,date:e.target.value}))}/></Field>
-            <Field label="Time *"><input type="time" style={inp} value={newShift.time} onChange={e=>setNewShift(f=>({...f,time:e.target.value}))}/></Field>
+            <Field label="Time *"><input style={inp} placeholder="e.g. 5pm, 10:30am" defaultValue={newShift.time?fmt12(newShift.time):''} onBlur={e=>{const t=parseTimeInput(e.target.value);if(t){e.target.value=fmt12(t);setNewShift(f=>({...f,time:t}))}}} /></Field>
             <Field label="Duration">
               <select style={inp} value={newShift.duration} onChange={e=>setNewShift(f=>({...f,duration:e.target.value}))}>
                 <option value="">—</option>
