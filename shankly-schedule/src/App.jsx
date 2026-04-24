@@ -582,7 +582,8 @@ export default function App(){
     await push(ref(db,'chat'),{coachId:loggedInCoach.id,coachName:loggedInCoach.name,text,ts:Date.now()})
     setChatMsg('')
     // Notify all coaches except sender
-    notifyAllCoaches('💬 '+loggedInCoach.name,text,db,[loggedInCoach.id])
+    const nonAdminIds=coaches.filter(c=>c.isAdmin).map(c=>c.id)
+    notifyAllCoaches('💬 '+loggedInCoach.name,text,db,[...nonAdminIds,loggedInCoach.id])
   }
   async function submitTimeOffRequest(){
     if(!timeOffReqF.startDate||!timeOffReqF.endDate){setToast('Select start and end dates');return}
