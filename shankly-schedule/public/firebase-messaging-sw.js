@@ -13,6 +13,7 @@ firebase.initializeApp({
  
 const messaging = firebase.messaging()
  
+// Handle background messages
 messaging.onBackgroundMessage(function(payload) {
   const { title, body } = payload.notification
   self.registration.showNotification(title, {
@@ -24,3 +25,8 @@ messaging.onBackgroundMessage(function(payload) {
     renotify: false
   })
 })
+ 
+// Intercept ALL push events to prevent FCM from showing its own notification
+self.addEventListener('push', function(event) {
+  event.stopImmediatePropagation()
+}, true)
