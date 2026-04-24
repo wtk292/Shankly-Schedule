@@ -358,6 +358,7 @@ export default function App(){
   const[opsTab,setOpsTab]=useState('schedule')
   const[sessionTypeModal,setSessionTypeModal]=useState(false)
   const[saving,setSaving]=useState(false)
+  const[confirmDelete,setConfirmDelete]=useState(null)
   const[lastChatRead,setLastChatRead]=useState(()=>{try{return parseInt(localStorage.getItem('lastChatRead')||'0')}catch{return 0}})
   const[lastFacilityView,setLastFacilityView]=useState(()=>{try{return parseInt(localStorage.getItem('lastFacilityView')||'0')}catch{return 0}})
   const[opsCalMonth,setOpsCalMonth]=useState({year:new Date().getFullYear(),month:new Date().getMonth()})
@@ -545,7 +546,15 @@ export default function App(){
     await set(ref(db,`coaches/${coach.id}/isAdmin`),!coach.isAdmin)
     setToast(`${coach.name} ${!coach.isAdmin?'is now an admin':'is no longer an admin'}`)
   }
-  async function removeSession(id){await remove(ref(db,`sessions/${id}`));setToast('Session removed')}
+  async function removeSession(id){
+    const sess=sessions.find(s=>s.id===id)
+    await remove(ref(db,`sessions/${id}`))
+    if(sess&&sess.coachId!==loggedInCoach?.id){
+      const when=sess.date?`${sess.date} at ${fmt12(sess.time)}`:`${fmt12(sess.time)}`
+      notifyCoach(sess.coachId,'Session Cancelled',`${sess.type==='solo'?`1-on-1 · ${sess.clientName}`:sess.name} on ${when} has been cancelled`,db)
+    }
+    setToast('Session removed')
+  }
   async function saveEvent(){
     if(!eventF.title||!eventF.date||!eventF.startTime){setToast('Fill in required fields');return}
     await push(ref(db,'facEvents'),{title:eventF.title,date:eventF.date,startTime:eventF.startTime,endTime:eventF.endTime,coachIds:eventF.coachIds,brand:eventF.brand})
@@ -810,7 +819,7 @@ export default function App(){
                                   <div style={{position:'absolute',top:4,right:4,display:'flex',gap:3}}>
                                     <button onClick={()=>openEdit(s)} style={{background:'transparent',border:'none',color:GRAY3,cursor:'pointer',fontSize:12,lineHeight:1,padding:0}}
                                       onMouseEnter={e=>e.target.style.color=GOLD} onMouseLeave={e=>e.target.style.color=GRAY3}>✎</button>
-                                    <button onClick={()=>removeSession(s.id)} style={{background:'transparent',border:'none',color:GRAY3,cursor:'pointer',fontSize:14,lineHeight:1,padding:0}}
+                                    <button onClick={()=>setConfirmDelete(s)} style={{background:'transparent',border:'none',color:GRAY3,cursor:'pointer',fontSize:14,lineHeight:1,padding:0}}
                                       onMouseEnter={e=>e.target.style.color=RED} onMouseLeave={e=>e.target.style.color=GRAY3}>×</button>
                                   </div>
                                 </div>
@@ -843,7 +852,7 @@ export default function App(){
                               <div style={{display:'flex',gap:6}}>
                                 <button onClick={()=>openEdit(s)} style={{background:'transparent',border:'none',color:GRAY3,cursor:'pointer',fontSize:14}}
                                   onMouseEnter={e=>e.target.style.color=GOLD} onMouseLeave={e=>e.target.style.color=GRAY3}>✎</button>
-                                <button onClick={()=>removeSession(s.id)} style={{background:'transparent',border:'none',color:GRAY3,cursor:'pointer',fontSize:16,padding:'0 4px'}}
+                                <button onClick={()=>setConfirmDelete(s)} style={{background:'transparent',border:'none',color:GRAY3,cursor:'pointer',fontSize:16,padding:'0 4px'}}
                                   onMouseEnter={e=>e.target.style.color=RED} onMouseLeave={e=>e.target.style.color=GRAY3}>×</button>
                               </div>
                             </div>
@@ -1270,6 +1279,22 @@ export default function App(){
               }}>Post Shift</Btn>
             </div>
           </div>
+        </Modal>
+
+        <Modal open={!!confirmDelete} onClose={()=>setConfirmDelete(null)} title="Cancel Session">
+          {confirmDelete&&(
+            <>
+              <p style={{fontSize:13,color:DIM,marginBottom:6}}>Are you sure you want to cancel this session?</p>
+              <div style={{background:GRAY2,borderRadius:8,padding:'12px 14px',marginBottom:20}}>
+                <div style={{fontWeight:700,fontSize:14}}>{confirmDelete.type==='solo'?`1-on-1 · ${confirmDelete.clientName}`:confirmDelete.name}</div>
+                <div style={{fontSize:12,color:DIM,marginTop:4}}>{confirmDelete.date} · {fmt12(confirmDelete.time)} · {confirmDelete.duration}min</div>
+              </div>
+              <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
+                <Btn outline onClick={()=>setConfirmDelete(null)}>Keep It</Btn>
+                <Btn danger onClick={()=>{removeSession(confirmDelete.id);setConfirmDelete(null)}}>Yes, Cancel</Btn>
+              </div>
+            </>
+          )}
         </Modal>
 
         <OpsBottomNav tab={opsTab} setTab={setOpsTab} pendingCount={pendingTimeOff.length}/>
