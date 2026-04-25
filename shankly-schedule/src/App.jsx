@@ -252,6 +252,7 @@ function OpsBottomNav({tab,setTab,pendingCount}){
     {id:'schedule',icon:ICON_SCHEDULE,label:'Schedule'},
     {id:'stats',icon:ICON_SUMMARY,label:'Stats'},
     {id:'timeoff',icon:ICON_TIMEOFF,label:'Time Off'},
+    {id:'payroll',icon:ICON_SUMMARY,label:'Payroll'},
     {id:'manage',icon:ICON_OPS,label:'Manage'},
   ]
   return(
@@ -1039,34 +1040,6 @@ export default function App(){
                     ):null
                   })()}
 
-                  {/* Running payroll */}
-                  {(()=>{
-                    const confirmedDates=Object.entries(confirmedDays).filter(([,v])=>v).map(([d])=>d)
-                    if(confirmedDates.length===0) return null
-                    const confirmedSessions=sessions.filter(s=>s.date&&isDateConfirmed(s.date))
-                    const hasAny=coaches.some(c=>calcCoachPayForPeriod(c.id,confirmedSessions)>0)
-                    if(!hasAny) return null
-                    return(
-                      <div style={{background:GRAY,borderRadius:10,padding:'12px 14px',marginBottom:14,border:`1px solid rgba(245,197,24,0.2)`}}>
-                        <div style={{fontSize:10,fontWeight:800,letterSpacing:1.5,textTransform:'uppercase',color:GOLD,marginBottom:10}}>Running Payroll ({confirmedDates.length} days confirmed)</div>
-                        {coaches.map(c=>{
-                          const pay=calcCoachPayForPeriod(c.id,confirmedSessions)
-                          if(pay===0&&!c.name?.toLowerCase().includes('will')) return null
-                          return(
-                            <div key={c.id} style={{display:'flex',justifyContent:'space-between',padding:'5px 0',borderBottom:`1px solid ${GRAY2}`}}>
-                              <span style={{fontSize:12,fontWeight:600}}>{c.name}</span>
-                              <span style={{fontSize:12,fontWeight:800,color:GOLD}}>${pay.toFixed(2)}</span>
-                            </div>
-                          )
-                        })}
-                        <div style={{display:'flex',justifyContent:'space-between',marginTop:8}}>
-                          <span style={{fontSize:12,fontWeight:700}}>Total</span>
-                          <span style={{fontSize:13,fontWeight:900,color:GOLD}}>${coaches.reduce((s,c)=>s+calcCoachPayForPeriod(c.id,confirmedSessions),0).toFixed(2)}</span>
-                        </div>
-                      </div>
-                    )
-                  })()}
-
                   <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(175px,1fr))',gap:10}}>
                   {coaches.map(coach=>{
                     const sess=getSessionsForCoach(coach.id,opsDate)
@@ -1194,6 +1167,55 @@ export default function App(){
             })}
           </div>
         )}
+
+        {/* ── PAYROLL TAB ── */}
+        {opsTab==='payroll'&&(()=>{
+          const confirmedSessions=sessions.filter(s=>s.date&&isDateConfirmed(s.date))
+          const confirmedDates=Object.entries(confirmedDays).filter(([,v])=>v).map(([d])=>d)
+          const grandTotal=coaches.reduce((s,c)=>s+calcCoachPayForPeriod(c.id,confirmedSessions),0)
+          return(
+            <div style={{padding:16}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+                <div>
+                  <div style={{fontSize:15,fontWeight:800}}>Running Payroll</div>
+                  <div style={{fontSize:11,color:DIM,marginTop:2}}>{confirmedDates.length} day{confirmedDates.length!==1?'s':''} confirmed</div>
+                </div>
+                <Btn outline onClick={()=>{setPayrollTab('period');setPayrollOpen(true)}} style={{fontSize:11,padding:'5px 10px'}}>New Period</Btn>
+              </div>
+              {confirmedDates.length===0
+                ?<div style={{textAlign:'center',padding:'60px 20px',color:DIM}}>No days confirmed yet. Confirm sessions from the Schedule tab to see running totals.</div>
+                :<>
+                  {coaches.map(c=>{
+                    const pay=calcCoachPayForPeriod(c.id,confirmedSessions)
+                    if(pay===0&&!c.name?.toLowerCase().includes('will')) return null
+                    const coachSessions=confirmedSessions.filter(s=>s.coachId===c.id||(s.assistIds&&s.assistIds.includes(c.id))||(s.coachIds&&s.coachIds.includes(c.id)))
+                    return(
+                      <div key={c.id} style={{background:GRAY,borderRadius:10,padding:'14px 16px',marginBottom:8,border:`1px solid ${GRAY2}`}}>
+                        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:coachSessions.length>0?8:0}}>
+                          <span style={{fontSize:14,fontWeight:700}}>{c.name}</span>
+                          <span style={{fontSize:18,fontWeight:900,color:GOLD}}>${pay.toFixed(2)}</span>
+                        </div>
+                        {coachSessions.length>0&&(
+                          <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
+                            {coachSessions.map(s=>(
+                              <span key={s.id} style={{fontSize:10,background:GRAY2,borderRadius:6,padding:'2px 8px',color:DIM}}>
+                                {s.type==='solo'?'1:1':s.type==='birthday'?'🎂':s.type==='rental'?'🏠':s.type==='league'?'⚽':'GRP'} · {s.date}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                  <div style={{display:'flex',justifyContent:'space-between',padding:'14px 16px',background:GRAY2,borderRadius:10,marginTop:8,border:`1px solid ${GRAY3}`}}>
+                    <span style={{fontWeight:800,fontSize:14}}>Grand Total</span>
+                    <span style={{fontWeight:900,fontSize:18,color:GOLD}}>${grandTotal.toFixed(2)}</span>
+                  </div>
+                </>
+              }
+            </div>
+          )
+        })()}
 
         {/* ── TIME OFF TAB ── */}
         {opsTab==='timeoff'&&(
