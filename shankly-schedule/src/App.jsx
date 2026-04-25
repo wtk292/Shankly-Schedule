@@ -406,6 +406,13 @@ export default function App(){
   const[shiftClaimModal,setShiftClaimModal]=useState(null)
   const[shiftMgmtOpen,setShiftMgmtOpen]=useState(false)
   const[newShift,setNewShift]=useState({title:'',date:'',time:'',duration:'',notes:''})
+  const[payrollOpen,setPayrollOpen]=useState(false)
+  const[payrollTab,setPayrollTab]=useState('ledger')
+  const[payPeriods,setPayPeriods]=useState([])
+  const[confirmedDays,setConfirmedDays]=useState({})
+  const[currentPeriod,setCurrentPeriod]=useState({start:'',end:''})
+  const[historyImportOpen,setHistoryImportOpen]=useState(false)
+  const[importData,setImportData]=useState({periodLabel:'',entries:{}})
   const[coachCalMonth,setCoachCalMonth]=useState({year:new Date().getFullYear(),month:new Date().getMonth()})
   const[coachSelDay,setCoachSelDay]=useState(null)
   const[facCalMonth,setFacCalMonth]=useState({year:new Date().getFullYear(),month:new Date().getMonth()})
@@ -452,7 +459,7 @@ export default function App(){
   const chatEndRef=useRef(null)
 
   useEffect(()=>{
-    let d=[false,false,false,false,false,false,false,false]
+    let d=[false,false,false,false,false,false,false,false,false,false]
     const check=()=>{if(d.every(Boolean))setLoading(false)}
     const u1=onValue(ref(db,'coaches'),s=>{setCoaches(objToArr(s.val()));d[0]=true;check()})
     const u2=onValue(ref(db,'sessions'),s=>{setSessions(objToArr(s.val()));d[1]=true;check()})
@@ -466,7 +473,9 @@ export default function App(){
     })
     const u7=onValue(ref(db,'timeOff'),s=>{setTimeOffRequests(objToArr(s.val()));d[6]=true;check()})
     const u8=onValue(ref(db,'shifts'),s=>{setShifts(objToArr(s.val()));d[7]=true;check()})
-    return()=>{u1();u2();u3();u4();u5();u6();u7();u8()}
+    const u9=onValue(ref(db,'payPeriods'),s=>{setPayPeriods(objToArr(s.val()).sort((a,b)=>a.startDate>b.startDate?1:-1));d[8]=true;check()})
+    const u10=onValue(ref(db,'confirmedDays'),s=>{setConfirmedDays(s.val()||{});d[9]=true;check()})
+    return()=>{u1();u2();u3();u4();u5();u6();u7();u8();u9();u10()}
   },[])
 
   useEffect(()=>{if(!toast)return;const t=setTimeout(()=>setToast(''),2400);return()=>clearTimeout(t)},[toast])
@@ -633,6 +642,145 @@ export default function App(){
     else await set(ref(db,`availability/${availCoach}/${availDate}`),true)
     setToast(current?'Marked available':'Marked unavailable')
   }
+  // ── PAYROLL HELPERS ──────────────────────────────────────────────
+
+  function getCoachRates(coach){
+    // Nestor gets higher rates
+    const isNestor=coach.name&&coach.name.toLowerCase().includes('nestor')
+    return{
+      lead: isNestor?25:20,
+      assist: isNestor?20:15,
+      league: 10,
+      rental: 12,
+      birthday: 40
+    }
+  }
+
+  function calcSessionPay(session, coachId){
+    const coach=coaches.find(c=>c.id===coachId)
+    if(!coach) return 0
+    const rates=getCoachRates(coach)
+    const hrs=(session.duration||60)/60
+
+    if(session.type==='solo') return rates.lead*hrs
+    if(session.type==='birthday') return rates.birthday
+    if(session.type==='rental') return rates.rental*hrs
+    if(session.type==='league') return rates.league*hrs
+    if(session.type==='group'){
+      // Check if coach is lead or assist
+      if(session.coachId===coachId) return rates.lead*hrs
+      if(session.assistIds&&session.assistIds.includes(coachId)) return rates.assist*hrs
+    }
+    // Will Russell salary - handled separately
+    return 0
+  }
+
+  function getSessionsInPeriod(startDate, endDate){
+    const start=new Date(startDate+'T00:00:00')
+    const end=new Date(endDate+'T00:00:00')
+    return sessions.filter(s=>{
+      if(!s.date) return false
+      const d=new Date(s.date+'T00:00:00')
+      return d>=start&&d<=end
+    })
+  }
+
+  function calcCoachPayForPeriod(coachId, periodSessions){
+    const coach=coaches.find(c=>c.id===coachId)
+    if(!coach) return 0
+    // Will Russell is salaried
+    if(coach.name&&coach.name.toLowerCase().includes('will russell')) return 1500
+    let total=0
+    periodSessions.forEach(s=>{
+      const isInvolved=s.coachId===coachId||(s.assistIds&&s.assistIds.includes(coachId))||(s.coachIds&&s.coachIds.includes(coachId))
+      if(isInvolved) total+=calcSessionPay(s,coachId)
+    })
+    return total
+  }
+
+  function getDatesInRange(start, end){
+    const dates=[]
+    const d=new Date(start+'T00:00:00')
+    const e=new Date(end+'T00:00:00')
+    while(d<=e){
+      dates.push(d.toISOString().slice(0,10))
+      d.setDate(d.getDate()+1)
+    }
+    return dates
+  }
+
+  function isDateConfirmed(dateStr){
+    return confirmedDays[dateStr]===true
+  }
+
+  async function confirmDay(dateStr){
+    await set(ref(db,`confirmedDays/${dateStr}`),true)
+    setToast(`${dateStr} confirmed ✓`)
+  }
+
+  async function unconfirmDay(dateStr){
+    await remove(ref(db,`confirmedDays/${dateStr}`))
+    setToast('Day unconfirmed')
+  }
+
+  async function savePayPeriod(startDate, endDate, coachTotals){
+    const label=`${startDate} – ${endDate}`
+    await push(ref(db,'payPeriods'),{
+      startDate,endDate,label,
+      totals:coachTotals,
+      createdAt:Date.now(),
+      paidStatus:{}
+    })
+    setToast('Pay period saved ✓')
+  }
+
+  async function togglePeriodPaid(periodId, coachId){
+    const period=payPeriods.find(p=>p.id===periodId)
+    if(!period) return
+    const current=period.paidStatus?.[coachId]
+    await set(ref(db,`payPeriods/${periodId}/paidStatus/${coachId}`),!current)
+  }
+
+  async function saveHistoricalPeriod(label, entries){
+    await push(ref(db,'payPeriods'),{
+      startDate:'',endDate:'',label,
+      totals:entries,
+      createdAt:Date.now(),
+      paidStatus:Object.fromEntries(Object.keys(entries).map(k=>[k,true])),
+      historical:true
+    })
+    setToast('Historical period saved ✓')
+  }
+
+  function exportPayrollCSV(year){
+    const yearPeriods=payPeriods.filter(p=>{
+      if(p.historical) return p.label.includes(year)
+      return p.startDate&&p.startDate.startsWith(year)
+    })
+    if(yearPeriods.length===0){setToast('No data for that year');return}
+    const allCoachIds=[...new Set(yearPeriods.flatMap(p=>Object.keys(p.totals||{})))]
+    const headers=['Coach',...yearPeriods.map(p=>p.label),'YTD Total']
+    const rows=allCoachIds.map(id=>{
+      const coach=coaches.find(c=>c.id===id)
+      const name=coach?.name||id
+      const vals=yearPeriods.map(p=>(p.totals?.[id]||0).toFixed(2))
+      const ytd=yearPeriods.reduce((sum,p)=>sum+(p.totals?.[id]||0),0)
+      return[name,...vals,ytd.toFixed(2)]
+    })
+    const total=['TOTAL',...yearPeriods.map(p=>{
+      const t=Object.values(p.totals||{}).reduce((s,v)=>s+v,0)
+      return t.toFixed(2)
+    }),yearPeriods.reduce((s,p)=>s+Object.values(p.totals||{}).reduce((a,v)=>a+v,0),0).toFixed(2)]
+    const csv=[headers,...rows,total].map(r=>r.join(',')).join('
+')
+    const blob=new Blob([csv],{type:'text/csv'})
+    const url=URL.createObjectURL(blob)
+    const a=document.createElement('a')
+    a.href=url;a.download=`shankly_payroll_${year}.csv`;a.click()
+    URL.revokeObjectURL(url)
+    setToast('CSV exported ✓')
+  }
+
   async function saveBirthday(){
     if(!birthdayF.clientName||!birthdayF.date||!birthdayF.time||!birthdayF.coachId){setToast('Fill in all required fields');return}
     if(saving)return;setSaving(true)
@@ -860,7 +1008,24 @@ export default function App(){
             {opsCalView==='list'&&(
               loading?<Spinner/>:coaches.length===0
                 ?<div style={{textAlign:'center',padding:'60px 20px',color:DIM}}>No coaches yet. Add them in <strong style={{color:GOLD}}>Manage</strong>.</div>
-                :<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(175px,1fr))',gap:10}}>
+                :<>
+                  {(()=>{
+                    const dk=dateKey(opsDate)
+                    const confirmed=isDateConfirmed(dk)
+                    const hasSessions=coaches.some(c=>getSessionsForCoach(c.id,opsDate).length>0)
+                    return hasSessions?(
+                      <div style={{display:'flex',justifyContent:'flex-end',marginBottom:10}}>
+                        {confirmed
+                          ?<div style={{display:'flex',alignItems:'center',gap:8}}>
+                            <span style={{fontSize:12,color:GREEN,fontWeight:700}}>✓ Day confirmed</span>
+                            <Btn outline onClick={()=>unconfirmDay(dk)} style={{fontSize:10,padding:'4px 10px'}}>Undo</Btn>
+                          </div>
+                          :<Btn gold onClick={()=>confirmDay(dk)} style={{fontSize:12,padding:'7px 16px'}}>✓ Confirm Day</Btn>
+                        }
+                      </div>
+                    ):null
+                  })()}
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(175px,1fr))',gap:10}}>
                   {coaches.map(coach=>{
                     const sess=getSessionsForCoach(coach.id,opsDate)
                     const unavail=!isCoachAvailable(coach.id,opsDate)
@@ -909,6 +1074,7 @@ export default function App(){
                     )
                   })}
                 </div>
+              </>
             )}
 
             {opsCalView==='calendar'&&(
@@ -1053,6 +1219,10 @@ export default function App(){
               </button>
               <button onClick={()=>setEventOpen(true)} style={{background:GRAY,border:`1px solid ${GRAY2}`,borderRadius:10,padding:'14px 16px',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',justifyContent:'space-between',color:WHITE}}>
                 <div style={{display:'flex',alignItems:'center',gap:10}}><span style={{fontSize:20}}>🏟️</span><span style={{fontSize:14,fontWeight:700}}>Facility Event</span></div>
+                <span style={{color:DIM,fontSize:18}}>›</span>
+              </button>
+              <button onClick={()=>setPayrollOpen(true)} style={{background:GRAY,border:`1px solid ${GRAY2}`,borderRadius:10,padding:'14px 16px',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',justifyContent:'space-between',color:WHITE}}>
+                <div style={{display:'flex',alignItems:'center',gap:10}}><span style={{fontSize:20}}>💵</span><span style={{fontSize:14,fontWeight:700}}>Payroll</span></div>
                 <span style={{color:DIM,fontSize:18}}>›</span>
               </button>
               <button onClick={()=>setShiftMgmtOpen(true)} style={{background:GRAY,border:`1px solid ${GRAY2}`,borderRadius:10,padding:'14px 16px',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',justifyContent:'space-between',color:WHITE}}>
@@ -1453,6 +1623,198 @@ export default function App(){
             </div>
           </div>
         </Modal>
+
+        {/* ── PAYROLL MODAL ── */}
+        {payrollOpen&&(
+          <div style={{position:'fixed',inset:0,zIndex:200,background:'rgba(0,0,0,0.85)',display:'flex',flexDirection:'column'}}>
+            <div style={{background:BLACK,borderBottom:`1px solid ${GRAY2}`,padding:'14px 16px',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
+              <span style={{fontSize:16,fontWeight:900,color:GOLD,letterSpacing:2,textTransform:'uppercase'}}>💵 Payroll</span>
+              <button onClick={()=>setPayrollOpen(false)} style={{background:'transparent',border:'none',color:DIM,fontSize:22,cursor:'pointer'}}>×</button>
+            </div>
+            <div style={{display:'flex',gap:0,borderBottom:`1px solid ${GRAY2}`,flexShrink:0,overflowX:'auto'}}>
+              {['ledger','period','tax','import'].map(t=>(
+                <button key={t} onClick={()=>setPayrollTab(t)} style={{background:'transparent',border:'none',borderBottom:`2px solid ${payrollTab===t?GOLD:'transparent'}`,color:payrollTab===t?GOLD:DIM,padding:'10px 16px',cursor:'pointer',fontFamily:'inherit',fontSize:12,fontWeight:payrollTab===t?800:400,textTransform:'uppercase',letterSpacing:1,whiteSpace:'nowrap'}}>
+                  {t==='ledger'?'Ledger':t==='period'?'New Period':t==='tax'?'Tax View':'Import History'}
+                </button>
+              ))}
+            </div>
+            <div style={{flex:1,overflowY:'auto',padding:16}}>
+
+              {/* LEDGER TAB */}
+              {payrollTab==='ledger'&&(
+                <div>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
+                    <div style={{fontSize:12,color:DIM}}>Tap any amount to toggle paid/unpaid</div>
+                    <div style={{display:'flex',gap:8}}>
+                      <Btn outline onClick={()=>exportPayrollCSV(new Date().getFullYear().toString())} style={{fontSize:11,padding:'5px 10px'}}>Export CSV</Btn>
+                    </div>
+                  </div>
+                  {payPeriods.length===0
+                    ?<div style={{textAlign:'center',padding:'40px 20px',color:DIM}}>No pay periods yet. Add historical data or run a new period.</div>
+                    :<div style={{display:'flex',flexDirection:'column',gap:10}}>
+                      {[...payPeriods].reverse().map(period=>(
+                        <div key={period.id} style={{background:GRAY,borderRadius:10,padding:'14px 16px',border:`1px solid ${GRAY2}`}}>
+                          <div style={{fontWeight:800,fontSize:13,color:GOLD,marginBottom:10}}>{period.label}</div>
+                          {coaches.map(coach=>{
+                            const pay=period.totals?.[coach.id]
+                            if(!pay&&pay!==0) return null
+                            const paid=period.paidStatus?.[coach.id]
+                            return(
+                              <div key={coach.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'7px 0',borderBottom:`1px solid ${GRAY2}`}}>
+                                <span style={{fontSize:13,fontWeight:600}}>{coach.name}</span>
+                                <button onClick={()=>togglePeriodPaid(period.id,coach.id)}
+                                  style={{background:paid?'rgba(129,199,132,0.15)':'rgba(255,183,77,0.12)',border:`1px solid ${paid?GREEN:ORANGE}`,color:paid?GREEN:ORANGE,fontSize:12,fontWeight:700,padding:'3px 12px',borderRadius:20,cursor:'pointer',fontFamily:'inherit'}}>
+                                  ${(pay||0).toFixed(2)} · {paid?'Paid':'Unpaid'}
+                                </button>
+                              </div>
+                            )
+                          })}
+                          <div style={{display:'flex',justifyContent:'flex-end',marginTop:8,fontSize:12,color:DIM,fontWeight:700}}>
+                            Total: ${Object.values(period.totals||{}).reduce((s,v)=>s+v,0).toFixed(2)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  }
+                </div>
+              )}
+
+              {/* NEW PERIOD TAB */}
+              {payrollTab==='period'&&(()=>{
+                const start=currentPeriod.start
+                const end=currentPeriod.end
+                const datesInRange=start&&end?getDatesInRange(start,end):[]
+                const confirmedInRange=datesInRange.filter(d=>isDateConfirmed(d))
+                const unconfirmedInRange=datesInRange.filter(d=>!isDateConfirmed(d))
+                const periodSessions=start&&end?getSessionsInPeriod(start,end).filter(s=>isDateConfirmed(s.date)):[]
+                const coachTotals=coaches.reduce((acc,c)=>{
+                  acc[c.id]=calcCoachPayForPeriod(c.id,periodSessions)
+                  return acc
+                },{})
+                const grandTotal=Object.values(coachTotals).reduce((s,v)=>s+v,0)
+
+                return(
+                  <div>
+                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:16}}>
+                      <div>
+                        <div style={{fontSize:11,color:DIM,marginBottom:4,textTransform:'uppercase',letterSpacing:1}}>Period Start</div>
+                        <input type="date" style={inp} value={currentPeriod.start} onChange={e=>setCurrentPeriod(p=>({...p,start:e.target.value}))}/>
+                      </div>
+                      <div>
+                        <div style={{fontSize:11,color:DIM,marginBottom:4,textTransform:'uppercase',letterSpacing:1}}>Period End</div>
+                        <input type="date" style={inp} value={currentPeriod.end} onChange={e=>setCurrentPeriod(p=>({...p,end:e.target.value}))}/>
+                      </div>
+                    </div>
+
+                    {start&&end&&(
+                      <>
+                        <div style={{display:'flex',gap:8,marginBottom:16,flexWrap:'wrap'}}>
+                          <div style={{background:'rgba(129,199,132,0.1)',border:`1px solid rgba(129,199,132,0.3)`,borderRadius:8,padding:'8px 12px',fontSize:12,color:GREEN}}>
+                            ✓ {confirmedInRange.length} days confirmed
+                          </div>
+                          {unconfirmedInRange.length>0&&(
+                            <div style={{background:'rgba(255,183,77,0.1)',border:`1px solid rgba(255,183,77,0.3)`,borderRadius:8,padding:'8px 12px',fontSize:12,color:ORANGE}}>
+                              ⚠ {unconfirmedInRange.length} days not confirmed
+                            </div>
+                          )}
+                        </div>
+
+                        <div style={{fontSize:12,fontWeight:700,color:DIM,textTransform:'uppercase',letterSpacing:1,marginBottom:10}}>Running Totals (confirmed days only)</div>
+                        {coaches.map(coach=>{
+                          const pay=coachTotals[coach.id]
+                          if(pay===0&&!coach.name?.toLowerCase().includes('will')) return null
+                          return(
+                            <div key={coach.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 12px',background:GRAY,borderRadius:8,marginBottom:6,border:`1px solid ${GRAY2}`}}>
+                              <span style={{fontSize:13,fontWeight:600}}>{coach.name}</span>
+                              <span style={{fontSize:16,fontWeight:800,color:GOLD}}>${pay.toFixed(2)}</span>
+                            </div>
+                          )
+                        })}
+                        <div style={{display:'flex',justifyContent:'space-between',padding:'12px',background:GRAY2,borderRadius:8,marginTop:8,marginBottom:20}}>
+                          <span style={{fontWeight:800,fontSize:14}}>Grand Total</span>
+                          <span style={{fontWeight:900,fontSize:16,color:GOLD}}>${grandTotal.toFixed(2)}</span>
+                        </div>
+
+                        <Btn gold onClick={async()=>{
+                          const nonZero=Object.fromEntries(Object.entries(coachTotals).filter(([,v])=>v>0))
+                          await savePayPeriod(start,end,nonZero)
+                          setCurrentPeriod({start:'',end:''})
+                          setPayrollTab('ledger')
+                        }} style={{width:'100%',padding:12,fontSize:14}}>Save Pay Period</Btn>
+                      </>
+                    )}
+                  </div>
+                )
+              })()}
+
+              {/* TAX VIEW TAB */}
+              {payrollTab==='tax'&&(()=>{
+                const year=new Date().getFullYear().toString()
+                const yearPeriods=payPeriods.filter(p=>p.startDate?.startsWith(year)||p.label?.includes(year))
+                return(
+                  <div>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+                      <div style={{fontSize:14,fontWeight:700}}>Tax Year {year}</div>
+                      <Btn outline onClick={()=>exportPayrollCSV(year)} style={{fontSize:11,padding:'5px 10px'}}>Export CSV</Btn>
+                    </div>
+                    {coaches.map(coach=>{
+                      const ytd=yearPeriods.reduce((sum,p)=>sum+(p.totals?.[coach.id]||0),0)
+                      if(ytd===0) return null
+                      const needs1099=ytd>=600
+                      return(
+                        <div key={coach.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 14px',background:GRAY,borderRadius:10,marginBottom:8,border:`1px solid ${GRAY2}`}}>
+                          <div>
+                            <div style={{fontWeight:700,fontSize:14}}>{coach.name}</div>
+                            <div style={{fontSize:11,color:DIM,marginTop:2}}>{yearPeriods.filter(p=>p.totals?.[coach.id]).length} periods</div>
+                          </div>
+                          <div style={{textAlign:'right'}}>
+                            <div style={{fontSize:18,fontWeight:800,color:GOLD}}>${ytd.toFixed(2)}</div>
+                            <span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:10,background:needs1099?'rgba(255,59,48,0.15)':'rgba(129,199,132,0.15)',color:needs1099?RED:GREEN}}>
+                              {needs1099?'1099 Required':'Below $600'}
+                            </span>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )
+              })()}
+
+              {/* IMPORT HISTORY TAB */}
+              {payrollTab==='import'&&(
+                <div>
+                  <div style={{fontSize:13,color:DIM,marginBottom:16}}>Enter historical pay period data from your Google Sheet. Each period is saved permanently.</div>
+                  <Field label="Period Label (e.g. 11/5–11/16)">
+                    <input style={inp} placeholder="e.g. 11/5-11/16" value={importData.periodLabel} onChange={e=>setImportData(d=>({...d,periodLabel:e.target.value}))}/>
+                  </Field>
+                  <div style={{fontSize:11,fontWeight:700,color:DIM,textTransform:'uppercase',letterSpacing:1,marginBottom:10,marginTop:4}}>Amount per coach</div>
+                  {coaches.map(coach=>(
+                    <div key={coach.id} style={{display:'flex',alignItems:'center',gap:10,marginBottom:8}}>
+                      <span style={{fontSize:13,flex:1,fontWeight:600}}>{coach.name}</span>
+                      <div style={{display:'flex',alignItems:'center',gap:4}}>
+                        <span style={{color:DIM,fontSize:13}}>$</span>
+                        <input type="number" style={{...inp,width:90,textAlign:'right'}} placeholder="0.00"
+                          value={importData.entries[coach.id]||''}
+                          onChange={e=>setImportData(d=>({...d,entries:{...d.entries,[coach.id]:parseFloat(e.target.value)||0}}))}/>
+                      </div>
+                    </div>
+                  ))}
+                  <div style={{display:'flex',gap:10,justifyContent:'flex-end',marginTop:16}}>
+                    <Btn outline onClick={()=>setImportData({periodLabel:'',entries:{}})}>Clear</Btn>
+                    <Btn gold onClick={async()=>{
+                      if(!importData.periodLabel){setToast('Enter a period label');return}
+                      const nonZero=Object.fromEntries(Object.entries(importData.entries).filter(([,v])=>v>0))
+                      if(Object.keys(nonZero).length===0){setToast('Enter at least one amount');return}
+                      await saveHistoricalPeriod(importData.periodLabel,nonZero)
+                      setImportData({periodLabel:'',entries:{}})
+                    }}>Save Historical Period</Btn>
+                  </div>
+                </div>
+              )}
+
+            </div>
+          </div>
+        )}
 
         <Modal open={!!confirmDelete} onClose={()=>setConfirmDelete(null)} title="Cancel Session">
           {confirmDelete&&(
