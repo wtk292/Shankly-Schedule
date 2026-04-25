@@ -1183,25 +1183,79 @@ export default function App(){
         {/* ── STATS TAB ── */}
         {opsTab==='stats'&&(
           <div style={{padding:16}}>
+            {/* Unconfirmed Sessions */}
+            {(()=>{
+              const upcoming=sessions.filter(s=>{
+                if(!s.date) return false
+                const d=new Date(s.date+'T00:00:00')
+                return d>=todayMidnight()
+              })
+              const unconfirmed=upcoming.filter(s=>!s.confirmedBy?.[s.coachId])
+              if(unconfirmed.length===0) return(
+                <div style={{background:'rgba(129,199,132,0.1)',border:`1px solid rgba(129,199,132,0.3)`,borderRadius:10,padding:'14px 16px',marginBottom:16,display:'flex',alignItems:'center',gap:10}}>
+                  <span style={{fontSize:20}}>✓</span>
+                  <span style={{fontSize:13,color:GREEN,fontWeight:700}}>All upcoming sessions confirmed</span>
+                </div>
+              )
+              return(
+                <div style={{marginBottom:20}}>
+                  <div style={{fontSize:12,fontWeight:800,letterSpacing:1.5,textTransform:'uppercase',color:ORANGE,marginBottom:10}}>
+                    ⚠ {unconfirmed.length} Unconfirmed Session{unconfirmed.length!==1?'s':''}
+                  </div>
+                  {unconfirmed.sort((a,b)=>a.date>b.date?1:-1).map(s=>{
+                    const coach=coaches.find(c=>c.id===s.coachId)
+                    return(
+                      <div key={s.id} style={{background:GRAY,borderRadius:8,padding:'10px 14px',marginBottom:6,border:`1px solid rgba(255,183,77,0.3)`,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                        <div>
+                          <div style={{fontSize:13,fontWeight:700}}>
+                            {s.type==='solo'?`1:1 · ${s.clientName}`:s.type==='birthday'?`🎂 ${s.clientName}`:s.type==='rental'?`🏠 ${s.name}`:s.type==='league'?`⚽ ${s.name}`:`👥 ${s.name}`}
+                          </div>
+                          <div style={{fontSize:11,color:DIM,marginTop:2}}>{coach?.name||'Unknown'} · {s.date} · {fmt12(s.time)}</div>
+                        </div>
+                        <span style={{fontSize:9,fontWeight:800,color:ORANGE,background:'rgba(255,183,77,0.12)',padding:'2px 8px',borderRadius:10}}>Unconfirmed</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            })()}
+
+            {/* Session Counts */}
             <div style={{fontSize:12,fontWeight:700,letterSpacing:1.5,textTransform:'uppercase',color:DIM,marginBottom:14}}>Session Counts</div>
             {coaches.map(coach=>{
-              const total=sessions.filter(s=>s.coachId===coach.id).length
+              const coachSessions=sessions.filter(s=>s.coachId===coach.id||(s.assistIds&&s.assistIds.includes(coach.id))||(s.coachIds&&s.coachIds.includes(coach.id)))
               const solos=sessions.filter(s=>s.coachId===coach.id&&s.type==='solo').length
-              const groups=sessions.filter(s=>s.coachId===coach.id&&s.type==='group').length
+              const groups=sessions.filter(s=>(s.coachId===coach.id||(s.assistIds&&s.assistIds.includes(coach.id)))&&s.type==='group').length
+              const birthdays=sessions.filter(s=>s.coachId===coach.id&&s.type==='birthday').length
+              const rentals=sessions.filter(s=>s.coachId===coach.id&&s.type==='rental').length
+              const leagues=sessions.filter(s=>s.coachIds&&s.coachIds.includes(coach.id)).length
+              const total=coachSessions.length
               return(
-                <div key={coach.id} style={{background:GRAY,borderRadius:10,padding:'12px 16px',marginBottom:8,border:`1px solid ${GRAY2}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                  <div style={{fontWeight:700,fontSize:14}}>{coach.name}</div>
-                  <div style={{display:'flex',gap:12,alignItems:'center'}}>
-                    <div style={{textAlign:'center'}}>
+                <div key={coach.id} style={{background:GRAY,borderRadius:10,padding:'12px 16px',marginBottom:8,border:`1px solid ${GRAY2}`}}>
+                  <div style={{fontWeight:700,fontSize:14,marginBottom:10}}>{coach.name}</div>
+                  <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
+                    {solos>0&&<div style={{textAlign:'center',minWidth:40}}>
                       <div style={{fontSize:18,fontWeight:900,color:BLUE}}>{solos}</div>
                       <div style={{fontSize:9,color:DIM,textTransform:'uppercase',letterSpacing:1}}>1-on-1</div>
-                    </div>
-                    <div style={{textAlign:'center'}}>
+                    </div>}
+                    {groups>0&&<div style={{textAlign:'center',minWidth:40}}>
                       <div style={{fontSize:18,fontWeight:900,color:GOLD}}>{groups}</div>
                       <div style={{fontSize:9,color:DIM,textTransform:'uppercase',letterSpacing:1}}>Group</div>
-                    </div>
-                    <div style={{textAlign:'center'}}>
-                      <div style={{fontSize:18,fontWeight:900,color:GREEN}}>{total}</div>
+                    </div>}
+                    {birthdays>0&&<div style={{textAlign:'center',minWidth:40}}>
+                      <div style={{fontSize:18,fontWeight:900,color:GREEN}}>{birthdays}</div>
+                      <div style={{fontSize:9,color:DIM,textTransform:'uppercase',letterSpacing:1}}>B-Day</div>
+                    </div>}
+                    {rentals>0&&<div style={{textAlign:'center',minWidth:40}}>
+                      <div style={{fontSize:18,fontWeight:900,color:PURPLE}}>{rentals}</div>
+                      <div style={{fontSize:9,color:DIM,textTransform:'uppercase',letterSpacing:1}}>Rental</div>
+                    </div>}
+                    {leagues>0&&<div style={{textAlign:'center',minWidth:40}}>
+                      <div style={{fontSize:18,fontWeight:900,color:ORANGE}}>{leagues}</div>
+                      <div style={{fontSize:9,color:DIM,textTransform:'uppercase',letterSpacing:1}}>League</div>
+                    </div>}
+                    <div style={{textAlign:'center',minWidth:40}}>
+                      <div style={{fontSize:18,fontWeight:900,color:WHITE}}>{total}</div>
                       <div style={{fontSize:9,color:DIM,textTransform:'uppercase',letterSpacing:1}}>Total</div>
                     </div>
                   </div>
