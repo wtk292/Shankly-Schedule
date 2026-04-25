@@ -417,6 +417,7 @@ export default function App(){
   const[importData,setImportData]=useState({periodLabel:'',entries:{}})
   const[editPeriod,setEditPeriod]=useState(null)
   const[editPeriodData,setEditPeriodData]=useState({})
+  const[submitPayrollOpen,setSubmitPayrollOpen]=useState(false)
   const[coachCalMonth,setCoachCalMonth]=useState({year:new Date().getFullYear(),month:new Date().getMonth()})
   const[coachSelDay,setCoachSelDay]=useState(null)
   const[facCalMonth,setFacCalMonth]=useState({year:new Date().getFullYear(),month:new Date().getMonth()})
@@ -743,6 +744,29 @@ export default function App(){
     if(!period) return
     const current=period.paidStatus?.[coachId]
     await set(ref(db,`payPeriods/${periodId}/paidStatus/${coachId}`),!current)
+  }
+
+  async function submitPayroll(){
+    const confirmedDates=Object.entries(confirmedDays).filter(([,v])=>v).map(([d])=>d).sort()
+    if(confirmedDates.length===0){setToast('No confirmed days to submit');return}
+    const startDate=confirmedDates[0]
+    const endDate=confirmedDates[confirmedDates.length-1]
+    const confirmedSessions=sessions.filter(s=>s.date&&isDateConfirmed(s.date))
+    const totals=coaches.reduce((acc,c)=>{
+      const pay=calcCoachPayForPeriod(c.id,confirmedSessions)
+      if(pay>0)acc[c.id]=pay
+      return acc
+    },{})
+    const label=`${startDate} – ${endDate}`
+    await push(ref(db,'payPeriods'),{
+      startDate,endDate,label,totals,
+      createdAt:Date.now(),
+      paidStatus:{}
+    })
+    // Clear all confirmed days
+    await set(ref(db,'confirmedDays'),null)
+    setSubmitPayrollOpen(false)
+    setToast('Pay period saved ✓')
   }
 
   async function deletePayPeriod(periodId){
@@ -1181,7 +1205,9 @@ export default function App(){
                   <div style={{fontSize:15,fontWeight:800}}>Running Payroll</div>
                   <div style={{fontSize:11,color:DIM,marginTop:2}}>{confirmedDates.length} day{confirmedDates.length!==1?'s':''} confirmed</div>
                 </div>
-                <Btn outline onClick={()=>{setPayrollTab('period');setPayrollOpen(true)}} style={{fontSize:11,padding:'5px 10px'}}>New Period</Btn>
+                {confirmedDates.length>0&&(
+                  <Btn gold onClick={()=>setSubmitPayrollOpen(true)} style={{fontSize:12,padding:'8px 14px'}}>Submit Payroll</Btn>
+                )}
               </div>
               {confirmedDates.length===0
                 ?<div style={{textAlign:'center',padding:'60px 20px',color:DIM}}>No days confirmed yet. Confirm sessions from the Schedule tab to see running totals.</div>
@@ -1954,6 +1980,40 @@ export default function App(){
             </div>
           </div>
         )}
+
+        {/* Submit Payroll Confirmation */}
+        {submitPayrollOpen&&(()=>{
+          const confirmedDates=Object.entries(confirmedDays).filter(([,v])=>v).map(([d])=>d).sort()
+          const startDate=confirmedDates[0]
+          const endDate=confirmedDates[confirmedDates.length-1]
+          const confirmedSessions=sessions.filter(s=>s.date&&isDateConfirmed(s.date))
+          const totals=coaches.map(c=>({coach:c,pay:calcCoachPayForPeriod(c.id,confirmedSessions)})).filter(x=>x.pay>0)
+          const grandTotal=totals.reduce((s,x)=>s+x.pay,0)
+          return(
+            <Modal open={submitPayrollOpen} onClose={()=>setSubmitPayrollOpen(false)} title="Submit Pay Period">
+              <div style={{background:GRAY2,borderRadius:8,padding:'12px 14px',marginBottom:16}}>
+                <div style={{fontSize:12,color:DIM,marginBottom:4}}>Period</div>
+                <div style={{fontSize:14,fontWeight:800,color:GOLD}}>{startDate} – {endDate}</div>
+                <div style={{fontSize:11,color:DIM,marginTop:4}}>{confirmedDates.length} confirmed days · {confirmedSessions.length} sessions</div>
+              </div>
+              {totals.map(({coach,pay})=>(
+                <div key={coach.id} style={{display:'flex',justifyContent:'space-between',padding:'7px 0',borderBottom:`1px solid ${GRAY2}`}}>
+                  <span style={{fontSize:13,fontWeight:600}}>{coach.name}</span>
+                  <span style={{fontSize:13,fontWeight:800,color:GOLD}}>${pay.toFixed(2)}</span>
+                </div>
+              ))}
+              <div style={{display:'flex',justifyContent:'space-between',padding:'10px 0',marginTop:4}}>
+                <span style={{fontSize:14,fontWeight:800}}>Total</span>
+                <span style={{fontSize:16,fontWeight:900,color:GOLD}}>${grandTotal.toFixed(2)}</span>
+              </div>
+              <p style={{fontSize:12,color:DIM,margin:'12px 0'}}>Submitting will save this period and clear all confirmed days to start fresh.</p>
+              <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
+                <Btn outline onClick={()=>setSubmitPayrollOpen(false)}>Cancel</Btn>
+                <Btn gold onClick={submitPayroll}>Confirm & Submit</Btn>
+              </div>
+            </Modal>
+          )
+        })()}
 
         <Modal open={!!confirmDelete} onClose={()=>setConfirmDelete(null)} title="Cancel Session">
           {confirmDelete&&(
