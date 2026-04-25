@@ -2532,18 +2532,42 @@ export default function App(){
               <div style={{fontSize:15,fontWeight:700}}>My Time Off</div>
               <Btn gold onClick={()=>setTimeOffReqOpen(true)} style={{fontSize:12}}>+ Request</Btn>
             </div>
-            {timeOffRequests.filter(r=>r.coachId===loggedInCoach.id).length===0
-              ?<div style={{textAlign:'center',padding:'40px 20px',color:DIM,fontSize:13}}>No requests yet.</div>
-              :timeOffRequests.filter(r=>r.coachId===loggedInCoach.id).sort((a,b)=>b.submittedAt-a.submittedAt).map(r=>{
-                const sc=r.status==='pending'?ORANGE:r.status==='approved'?GREEN:RED
-                const sl=r.status==='pending'?'Pending':r.status==='approved'?'Approved':'Denied'
-                return(<div key={r.id} style={{background:GRAY,borderRadius:9,padding:'14px 16px',marginBottom:10,border:`1px solid ${GRAY2}`,borderLeft:`3px solid ${sc}`}}>
-                  <div style={{fontSize:14,fontWeight:700,marginBottom:4}}>{r.startDate} → {r.endDate}</div>
-                  {r.reason&&<div style={{fontSize:12,color:DIM,marginBottom:6}}>"{r.reason}"</div>}
-                  <span style={{fontSize:10,fontWeight:700,letterSpacing:1,padding:'2px 8px',borderRadius:20,background:`${sc}22`,color:sc}}>{sl}</span>
-                </div>)
-              })
-            }
+            {(()=>{
+              const myRequests=timeOffRequests.filter(r=>r.coachId===loggedInCoach.id).sort((a,b)=>b.submittedAt-a.submittedAt)
+              if(myRequests.length===0) return <div style={{textAlign:'center',padding:'40px 20px',color:DIM,fontSize:13}}>No requests yet.</div>
+              const pending=myRequests.filter(r=>r.status==='pending')
+              const resolved=myRequests.filter(r=>r.status!=='pending')
+              return(<>
+                {pending.length>0&&(
+                  <>
+                    <div style={{fontSize:10,fontWeight:800,letterSpacing:1.5,textTransform:'uppercase',color:ORANGE,marginBottom:8}}>Pending</div>
+                    {pending.map(r=>(
+                      <div key={r.id} style={{background:GRAY,borderRadius:9,padding:'14px 16px',marginBottom:10,border:`1px solid rgba(255,183,77,0.3)`,borderLeft:`3px solid ${ORANGE}`}}>
+                        <div style={{fontSize:14,fontWeight:700,marginBottom:4}}>{r.startDate} → {r.endDate}</div>
+                        {r.reason&&<div style={{fontSize:12,color:DIM,marginBottom:6}}>"{r.reason}"</div>}
+                        <span style={{fontSize:10,fontWeight:700,letterSpacing:1,padding:'2px 8px',borderRadius:20,background:'rgba(255,183,77,0.12)',color:ORANGE}}>⏳ Awaiting approval</span>
+                      </div>
+                    ))}
+                  </>
+                )}
+                {resolved.length>0&&(
+                  <>
+                    <div style={{fontSize:10,fontWeight:800,letterSpacing:1.5,textTransform:'uppercase',color:DIM,marginBottom:8,marginTop:pending.length>0?16:0}}>History</div>
+                    {resolved.map(r=>{
+                      const sc=r.status==='approved'?GREEN:RED
+                      const sl=r.status==='approved'?'✓ Approved':'✗ Denied'
+                      return(
+                        <div key={r.id} style={{background:GRAY,borderRadius:9,padding:'14px 16px',marginBottom:10,border:`1px solid ${GRAY2}`,borderLeft:`3px solid ${sc}`,opacity:0.8}}>
+                          <div style={{fontSize:14,fontWeight:700,marginBottom:4}}>{r.startDate} → {r.endDate}</div>
+                          {r.reason&&<div style={{fontSize:12,color:DIM,marginBottom:6}}>"{r.reason}"</div>}
+                          <span style={{fontSize:10,fontWeight:700,letterSpacing:1,padding:'2px 8px',borderRadius:20,background:`${sc}22`,color:sc}}>{sl}</span>
+                        </div>
+                      )
+                    })}
+                  </>
+                )}
+              </>)
+            })()}
           </div>
         )}
 
