@@ -1104,7 +1104,14 @@ export default function App(){
                                   <div style={{fontSize:14,fontWeight:900,lineHeight:1}}>
                                     {fmt12(s.time)}
                                   </div>
-                                  <div style={{fontSize:10,color:DIM,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',maxWidth:'calc(100% - 38px)'}}>{s.type==='solo'?`1:1 · ${s.clientName}`:s.type==='birthday'?`🎂 ${s.clientName}`:s.type==='rental'?`🏠 ${s.name}`:s.type==='league'?`⚽ ${s.name}`:s.name}</div>
+                                  <div style={{fontSize:10,color:DIM,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',maxWidth:'calc(100% - 38px)'}}>{s.type==='solo'?`1:1 · ${s.clientName}`:s.type==='birthday'?`🎂 ${s.clientName}`:s.type==='rental'?`🏠 ${s.name}`:s.type==='league'?`⚽ ${s.name}`:s.type==='group'?`👥 ${s.name}`:s.name}</div>
+                                  {s.type==='group'&&(
+                                    <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:3}}>
+                                      {s.coachId===coach.id&&<span style={{fontSize:9,fontWeight:800,color:GOLD,background:'rgba(245,197,24,0.12)',padding:'2px 6px',borderRadius:8}}>Lead</span>}
+                                      {s.assistIds&&s.assistIds.includes(coach.id)&&<span style={{fontSize:9,fontWeight:800,color:BLUE,background:'rgba(79,195,247,0.12)',padding:'2px 6px',borderRadius:8}}>Assist</span>}
+                                      {s.assistIds&&s.assistIds.length>0&&<span style={{fontSize:9,color:DIM,padding:'2px 6px'}}>{s.assistIds.length} assist{s.assistIds.length!==1?'s':''}</span>}
+                                    </div>
+                                  )}
                                   <div style={{marginTop:4}}>
                                     {s.confirmedBy?.[s.coachId]
                                       ?<span style={{fontSize:9,fontWeight:800,color:GREEN,background:'rgba(129,199,132,0.15)',padding:'2px 7px',borderRadius:10,letterSpacing:0.5}}>✓ Confirmed</span>
@@ -1142,7 +1149,7 @@ export default function App(){
                           return(
                             <div key={s.id} style={{background:GRAY2,borderRadius:6,padding:'8px 10px',marginBottom:6,borderLeft:`3px solid ${s.type==='solo'?BLUE:s.type==='birthday'?GREEN:s.type==='rental'?PURPLE:s.type==='league'?ORANGE:GOLD}`,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                               <div>
-                                <div style={{fontSize:13,fontWeight:700}}>{fmt12(s.time)} · {s.type==='solo'?`1:1 · ${s.clientName}`:s.type==='birthday'?`🎂 ${s.clientName}`:s.type==='rental'?`🏠 ${s.name}`:s.type==='league'?`⚽ ${s.name}`:s.name}</div>
+                                <div style={{fontSize:13,fontWeight:700}}>{fmt12(s.time)} · {s.type==='solo'?`1:1 · ${s.clientName}`:s.type==='birthday'?`🎂 ${s.clientName}`:s.type==='rental'?`🏠 ${s.name}`:s.type==='league'?`⚽ ${s.name}`:s.type==='group'?`👥 ${s.name}`:s.name}</div>
                                 <div style={{fontSize:11,color:DIM,marginTop:2}}>{coach?.name||'Unknown'}</div>
                               </div>
                               <div style={{display:'flex',gap:6}}>
