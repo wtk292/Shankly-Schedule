@@ -418,6 +418,7 @@ export default function App(){
   const[editPeriod,setEditPeriod]=useState(null)
   const[editPeriodData,setEditPeriodData]=useState({})
   const[submitPayrollOpen,setSubmitPayrollOpen]=useState(false)
+  const[ledgerSort,setLedgerSort]=useState('newest')
   const[coachCalMonth,setCoachCalMonth]=useState({year:new Date().getFullYear(),month:new Date().getMonth()})
   const[coachSelDay,setCoachSelDay]=useState(null)
   const[facCalMonth,setFacCalMonth]=useState({year:new Date().getFullYear(),month:new Date().getMonth()})
@@ -1734,16 +1735,21 @@ export default function App(){
               {/* LEDGER TAB */}
               {payrollTab==='ledger'&&(
                 <div>
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14,flexWrap:'wrap',gap:8}}>
                     <div style={{fontSize:12,color:DIM}}>Tap any amount to toggle paid/unpaid</div>
-                    <div style={{display:'flex',gap:8}}>
+                    <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                      <select value={ledgerSort} onChange={e=>setLedgerSort(e.target.value)}
+                        style={{...inp,fontSize:11,padding:'5px 10px',width:'auto'}}>
+                        <option value="newest">Newest First</option>
+                        <option value="oldest">Oldest First</option>
+                      </select>
                       <Btn outline onClick={()=>exportPayrollCSV(new Date().getFullYear().toString())} style={{fontSize:11,padding:'5px 10px'}}>Export CSV</Btn>
                     </div>
                   </div>
                   {payPeriods.length===0
                     ?<div style={{textAlign:'center',padding:'40px 20px',color:DIM}}>No pay periods yet. Add historical data or run a new period.</div>
                     :<div style={{display:'flex',flexDirection:'column',gap:10}}>
-                      {[...payPeriods].reverse().map(period=>{
+                      {[...payPeriods].sort((a,b)=>ledgerSort==='newest'?b.createdAt-a.createdAt:a.createdAt-b.createdAt).map(period=>{
                         const isEditing=editPeriod===period.id
                         const allEntries=Object.entries(period.totals||{})
                         const periodTotal=allEntries.reduce((s,[,v])=>s+v,0)
