@@ -771,8 +771,7 @@ export default function App(){
       const t=Object.values(p.totals||{}).reduce((s,v)=>s+v,0)
       return t.toFixed(2)
     }),yearPeriods.reduce((s,p)=>s+Object.values(p.totals||{}).reduce((a,v)=>a+v,0),0).toFixed(2)]
-    const csv=[headers,...rows,total].map(r=>r.join(',')).join('
-')
+    const csv=[headers,...rows,total].map(r=>r.join(',')).join('\n')
     const blob=new Blob([csv],{type:'text/csv'})
     const url=URL.createObjectURL(blob)
     const a=document.createElement('a')
