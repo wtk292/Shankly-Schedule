@@ -294,6 +294,7 @@ function SoloModal({open,onClose,form,setForm,coaches,onSave}){
 }
 
 function GroupModal({open,onClose,form,setForm,coaches,onSave}){
+  const allCoaches=coaches
   return(
     <Modal open={open} onClose={onClose} title="Add Group Session">
       <Field label="Session Name *"><input style={inp} value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} placeholder="e.g. U12 Technical Training"/></Field>
@@ -316,10 +317,26 @@ function GroupModal({open,onClose,form,setForm,coaches,onSave}){
           <option value="60">60 min</option><option value="90">90 min</option><option value="120">120 min</option>
         </select>
       </Field>
-      <Field label="Assign Coach *">
-        <select style={inp} value={form.coachId} onChange={e=>setForm(f=>({...f,coachId:e.target.value}))}>
-          {coaches.length===0?<option value="">No eligible coaches</option>:coaches.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+      <Field label="Lead Coach (Coach rate) *">
+        <select style={inp} value={form.coachId} onChange={e=>setForm(f=>({...f,coachId:e.target.value,assistIds:(f.assistIds||[]).filter(id=>id!==e.target.value)}))}>
+          <option value="">Select lead coach</option>
+          {allCoaches.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
+      </Field>
+      <Field label="Assist Coaches (optional — Assist rate)">
+        <div style={{display:'flex',flexDirection:'column',gap:5,marginTop:4}}>
+          {allCoaches.filter(c=>c.id!==form.coachId).map(c=>{
+            const isAssist=(form.assistIds||[]).includes(c.id)
+            return(
+              <label key={c.id} style={{display:'flex',alignItems:'center',gap:8,fontSize:13,cursor:'pointer',padding:'6px 10px',background:isAssist?'rgba(245,197,24,0.1)':GRAY2,borderRadius:6,border:`1px solid ${isAssist?GOLD:GRAY3}`}}>
+                <input type="checkbox" checked={isAssist} onChange={e=>{
+                  setForm(f=>({...f,assistIds:e.target.checked?[...(f.assistIds||[]),c.id]:(f.assistIds||[]).filter(id=>id!==c.id)}))
+                }}/>
+                {c.name} <span style={{fontSize:11,color:DIM}}>— Assist</span>
+              </label>
+            )
+          })}
+        </div>
       </Field>
       <div style={{display:'flex',gap:10,justifyContent:'flex-end',marginTop:20}}>
         <Btn outline onClick={onClose}>Cancel</Btn>
@@ -407,7 +424,7 @@ export default function App(){
   const[timeOffOpen,setTimeOffOpen]=useState(false)
   const[timeOffReqOpen,setTimeOffReqOpen]=useState(false)
   const blankSolo={client:'',date:'',time:'',dur:'60',coachId:'',notes:''}
-  const blankGroup={name:'',repeat:'weekly',dow:'1',date:'',time:'',dur:'60',coachId:''}
+  const blankGroup={name:'',repeat:'weekly',dow:'1',date:'',time:'',dur:'60',coachId:'',assistIds:[]}
   const blankBirthday={clientName:'',date:'',time:'',coachId:'',notes:''}
   const blankRental={name:'',date:'',time:'',dur:'60',coachId:'',notes:''}
   const blankLeague={name:'',date:'',time:'',dur:'60',coachIds:[],notes:''}
@@ -473,10 +490,17 @@ export default function App(){
   function getSessionsForCoach(coachId,date){
     const dk=dateKey(date),dow=date.getDay()
     return sessions.filter(s=>{
-      // League sessions use coachIds array
       if(s.type==='league')return s.coachIds&&s.coachIds.includes(coachId)&&s.date===dk
-      // Birthday and rental always have single coachId
       if(s.type==='birthday'||s.type==='rental')return s.coachId===coachId&&s.date===dk
+      // Group: coach can be lead or assist
+      if(s.type==='group'){
+        const isLead=s.coachId===coachId
+        const isAssist=s.assistIds&&s.assistIds.includes(coachId)
+        if(!isLead&&!isAssist)return false
+        if(s.repeat==='weekly')return s.dow===dow
+        if(s.repeat==='once')return s.date===dk
+        return false
+      }
       if(s.coachId!==coachId)return false
       if(s.type==='solo')return s.date===dk
       if(s.repeat==='weekly')return s.dow===dow
@@ -542,12 +566,13 @@ export default function App(){
   async function saveGroup(){
     if(!groupF.name||!groupF.time||!groupF.coachId){setToast('Fill in all required fields');return}
     if(groupF.repeat==='once'&&!groupF.date){setToast('Pick a date');return}
-    const sess={type:'group',name:groupF.name,time:groupF.time,duration:parseInt(groupF.dur),coachId:groupF.coachId,repeat:groupF.repeat}
+    const sess={type:'group',name:groupF.name,time:groupF.time,duration:parseInt(groupF.dur),coachId:groupF.coachId,assistIds:groupF.assistIds||[],repeat:groupF.repeat}
     if(groupF.repeat==='weekly')sess.dow=parseInt(groupF.dow);else sess.date=groupF.date
     if(saving)return;setSaving(true)
     await push(ref(db,'sessions'),sess)
     const when=groupF.repeat==='weekly'?`Every ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][parseInt(groupF.dow)]}`:groupF.date
-    if(groupF.coachId!==loggedInCoach?.id)notifyCoach(groupF.coachId,'New Group Session',`${groupF.name} · ${when} at ${fmt12(groupF.time)}`,db)
+    if(groupF.coachId!==loggedInCoach?.id)notifyCoach(groupF.coachId,'New Group Session (Lead)',`${groupF.name} · ${when} at ${fmt12(groupF.time)}`,db)
+    ;(groupF.assistIds||[]).filter(id=>id!==loggedInCoach?.id).forEach(id=>notifyCoach(id,'New Group Session (Assist)',`${groupF.name} · ${when} at ${fmt12(groupF.time)}`,db))
     setGroupOpen(false);setGroupF(blankGroup);setToast('Group session added ✓');setSaving(false)
   }
   async function saveEdit(){
@@ -1514,7 +1539,7 @@ export default function App(){
                             {s.type==='solo'?`1-on-1 · ${s.clientName}`:s.type==='birthday'?`🎂 ${s.clientName}`:s.type==='rental'?`🏠 ${s.name}`:s.type==='league'?`⚽ ${s.name}`:s.name}
                             {s.confirmedBy?.[loggedInCoach.id]&&<span style={{fontSize:10,background:'rgba(129,199,132,0.2)',color:GREEN,padding:'1px 7px',borderRadius:10,fontWeight:700}}>✓ Confirmed</span>}
                           </div>
-                          <div style={{fontSize:11,color:DIM,marginBottom:s.confirmedBy?.[loggedInCoach.id]?0:10}}>{s.type==='solo'?(s.notes||'No notes'):s.type==='birthday'?`Flat rate · $40`:s.type==='rental'?`Rental · $12/hr`:s.type==='league'?`League · $10/hr`:`Group · ${s.duration}min`}</div>
+                          <div style={{fontSize:11,color:DIM,marginBottom:s.confirmedBy?.[loggedInCoach.id]?0:10}}>{s.type==='solo'?(s.notes||'No notes'):s.type==='birthday'?'Flat rate · $40':s.type==='rental'?'Rental · $12/hr':s.type==='league'?'League · $10/hr':s.type==='group'?(s.coachId===loggedInCoach.id?'Group · Lead':'Group · Assist'):`Group · ${s.duration}min`}</div>
                           {!s.confirmedBy?.[loggedInCoach.id]&&(
                             <Btn gold onClick={()=>confirmSession(s.id)} style={{fontSize:11,padding:'5px 14px',marginTop:6}}>Confirm</Btn>
                           )}
@@ -1546,7 +1571,7 @@ export default function App(){
                               {s.type==='solo'?`1-on-1 · ${s.clientName}`:s.type==='birthday'?`🎂 ${s.clientName}`:s.type==='rental'?`🏠 ${s.name}`:s.type==='league'?`⚽ ${s.name}`:s.name}
                               {s.confirmedBy?.[loggedInCoach.id]&&<span style={{fontSize:10,background:'rgba(129,199,132,0.2)',color:GREEN,padding:'1px 7px',borderRadius:10,fontWeight:700}}>✓</span>}
                             </div>
-                            <div style={{fontSize:11,color:DIM,marginBottom:s.confirmedBy?.[loggedInCoach.id]?0:8}}>{s.type==='solo'?(s.notes||'No notes'):s.type==='birthday'?`Flat rate · $40`:s.type==='rental'?`Rental · $12/hr`:s.type==='league'?`League · $10/hr`:`Group · ${s.duration}min`}</div>
+                            <div style={{fontSize:11,color:DIM,marginBottom:s.confirmedBy?.[loggedInCoach.id]?0:8}}>{s.type==='solo'?(s.notes||'No notes'):s.type==='birthday'?'Flat rate · $40':s.type==='rental'?'Rental · $12/hr':s.type==='league'?'League · $10/hr':s.type==='group'?(s.coachId===loggedInCoach.id?'Group · Lead':'Group · Assist'):`Group · ${s.duration}min`}</div>
                             {!s.confirmedBy?.[loggedInCoach.id]&&(
                               <Btn gold onClick={()=>confirmSession(s.id)} style={{fontSize:10,padding:'4px 12px',marginTop:4}}>Confirm</Btn>
                             )}
