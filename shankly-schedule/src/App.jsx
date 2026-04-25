@@ -1786,7 +1786,7 @@ export default function App(){
                   <Field label="Period Label (e.g. 11/5–11/16)">
                     <input style={inp} placeholder="e.g. 11/5-11/16" value={importData.periodLabel} onChange={e=>setImportData(d=>({...d,periodLabel:e.target.value}))}/>
                   </Field>
-                  <div style={{fontSize:11,fontWeight:700,color:DIM,textTransform:'uppercase',letterSpacing:1,marginBottom:10,marginTop:4}}>Amount per coach</div>
+                  <div style={{fontSize:11,fontWeight:700,color:DIM,textTransform:'uppercase',letterSpacing:1,marginBottom:10,marginTop:4}}>Active Coaches</div>
                   {coaches.map(coach=>(
                     <div key={coach.id} style={{display:'flex',alignItems:'center',gap:10,marginBottom:8}}>
                       <span style={{fontSize:13,flex:1,fontWeight:600}}>{coach.name}</span>
@@ -1798,14 +1798,37 @@ export default function App(){
                       </div>
                     </div>
                   ))}
-                  <div style={{display:'flex',gap:10,justifyContent:'flex-end',marginTop:16}}>
-                    <Btn outline onClick={()=>setImportData({periodLabel:'',entries:{}})}>Clear</Btn>
+
+                  <div style={{fontSize:11,fontWeight:700,color:DIM,textTransform:'uppercase',letterSpacing:1,marginBottom:10,marginTop:16}}>Inactive / Past Coaches</div>
+                  <div style={{fontSize:12,color:DIM,marginBottom:10}}>Add anyone not currently in the app</div>
+                  {(importData.extraCoaches||[]).map((ec,i)=>(
+                    <div key={i} style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+                      <input style={{...inp,flex:1}} placeholder="Name" value={ec.name}
+                        onChange={e=>setImportData(d=>({...d,extraCoaches:d.extraCoaches.map((x,j)=>j===i?{...x,name:e.target.value}:x)}))}/>
+                      <div style={{display:'flex',alignItems:'center',gap:4}}>
+                        <span style={{color:DIM,fontSize:13}}>$</span>
+                        <input type="number" style={{...inp,width:90,textAlign:'right'}} placeholder="0.00" value={ec.amount||''}
+                          onChange={e=>setImportData(d=>({...d,extraCoaches:d.extraCoaches.map((x,j)=>j===i?{...x,amount:parseFloat(e.target.value)||0}:x)}))}/>
+                      </div>
+                      <button onClick={()=>setImportData(d=>({...d,extraCoaches:d.extraCoaches.filter((_,j)=>j!==i)}))}
+                        style={{background:'transparent',border:'none',color:DIM,cursor:'pointer',fontSize:18}}>×</button>
+                    </div>
+                  ))}
+                  <button onClick={()=>setImportData(d=>({...d,extraCoaches:[...(d.extraCoaches||[]),{name:'',amount:0}]}))}
+                    style={{background:'transparent',border:`1px dashed ${GRAY3}`,color:DIM,borderRadius:8,padding:'8px 16px',cursor:'pointer',fontFamily:'inherit',fontSize:12,width:'100%',marginBottom:16}}>
+                    + Add Inactive Coach
+                  </button>
+
+                  <div style={{display:'flex',gap:10,justifyContent:'flex-end',marginTop:8}}>
+                    <Btn outline onClick={()=>setImportData({periodLabel:'',entries:{},extraCoaches:[]})}>Clear</Btn>
                     <Btn gold onClick={async()=>{
                       if(!importData.periodLabel){setToast('Enter a period label');return}
-                      const nonZero=Object.fromEntries(Object.entries(importData.entries).filter(([,v])=>v>0))
-                      if(Object.keys(nonZero).length===0){setToast('Enter at least one amount');return}
-                      await saveHistoricalPeriod(importData.periodLabel,nonZero)
-                      setImportData({periodLabel:'',entries:{}})
+                      const activeEntries=Object.fromEntries(Object.entries(importData.entries).filter(([,v])=>v>0))
+                      const extraEntries=Object.fromEntries((importData.extraCoaches||[]).filter(ec=>ec.name&&ec.amount>0).map(ec=>[ec.name,ec.amount]))
+                      const allEntries={...activeEntries,...extraEntries}
+                      if(Object.keys(allEntries).length===0){setToast('Enter at least one amount');return}
+                      await saveHistoricalPeriod(importData.periodLabel,allEntries)
+                      setImportData({periodLabel:'',entries:{},extraCoaches:[]})
                     }}>Save Historical Period</Btn>
                   </div>
                 </div>
