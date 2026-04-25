@@ -409,6 +409,9 @@ export default function App(){
   const[shiftMgmtOpen,setShiftMgmtOpen]=useState(false)
   const[newShift,setNewShift]=useState({title:'',date:'',time:'',duration:'',notes:''})
   const[payrollOpen,setPayrollOpen]=useState(false)
+  const[ratesOpen,setRatesOpen]=useState(false)
+  const[globalRates,setGlobalRates]=useState({birthday:40,rental:12,league:10})
+  const[coachRates,setCoachRates]=useState({})
   const[payrollTab,setPayrollTab]=useState('ledger')
   const[payPeriods,setPayPeriods]=useState([])
   const[confirmedDays,setConfirmedDays]=useState({})
@@ -465,7 +468,7 @@ export default function App(){
   const chatEndRef=useRef(null)
 
   useEffect(()=>{
-    let d=[false,false,false,false,false,false,false,false,false,false]
+    let d=[false,false,false,false,false,false,false,false,false,false,false,false]
     const check=()=>{if(d.every(Boolean))setLoading(false)}
     const u1=onValue(ref(db,'coaches'),s=>{setCoaches(objToArr(s.val()));d[0]=true;check()})
     const u2=onValue(ref(db,'sessions'),s=>{setSessions(objToArr(s.val()));d[1]=true;check()})
@@ -481,7 +484,9 @@ export default function App(){
     const u8=onValue(ref(db,'shifts'),s=>{setShifts(objToArr(s.val()));d[7]=true;check()})
     const u9=onValue(ref(db,'payPeriods'),s=>{setPayPeriods(objToArr(s.val()).sort((a,b)=>a.startDate>b.startDate?1:-1));d[8]=true;check()})
     const u10=onValue(ref(db,'confirmedDays'),s=>{setConfirmedDays(s.val()||{});d[9]=true;check()})
-    return()=>{u1();u2();u3();u4();u5();u6();u7();u8();u9();u10()}
+    const u11=onValue(ref(db,'globalRates'),s=>{if(s.val())setGlobalRates(s.val());d[10]=true;check()})
+    const u12=onValue(ref(db,'coachRates'),s=>{setCoachRates(s.val()||{});d[11]=true;check()})
+    return()=>{u1();u2();u3();u4();u5();u6();u7();u8();u9();u10();u11();u12()}
   },[])
 
   useEffect(()=>{if(!toast)return;const t=setTimeout(()=>setToast(''),2400);return()=>clearTimeout(t)},[toast])
@@ -651,14 +656,19 @@ export default function App(){
   // ── PAYROLL HELPERS ──────────────────────────────────────────────
 
   function getCoachRates(coach){
-    // Nestor gets higher rates
+    // Check Firebase rates first, fall back to defaults
+    const stored=coachRates[coach.id]
     const isNestor=coach.name&&coach.name.toLowerCase().includes('nestor')
+    const defaultLead=isNestor?25:20
+    const defaultAssist=isNestor?20:15
     return{
-      lead: isNestor?25:20,
-      assist: isNestor?20:15,
-      league: 10,
-      rental: 12,
-      birthday: 40
+      lead: stored?.lead??defaultLead,
+      assist: stored?.assist??defaultAssist,
+      salary: stored?.salary??false,
+      salaryAmount: stored?.salaryAmount??(coach.name?.toLowerCase().includes('will')?1500:0),
+      league: globalRates.league??10,
+      rental: globalRates.rental??12,
+      birthday: globalRates.birthday??40
     }
   }
 
@@ -694,8 +704,8 @@ export default function App(){
   function calcCoachPayForPeriod(coachId, periodSessions){
     const coach=coaches.find(c=>c.id===coachId)
     if(!coach) return 0
-    // Will Russell is salaried
-    if(coach.name&&coach.name.toLowerCase().includes('will russell')) return 1500
+    const rates=getCoachRates(coach)
+    if(rates.salary) return rates.salaryAmount
     let total=0
     periodSessions.forEach(s=>{
       const isInvolved=s.coachId===coachId||(s.assistIds&&s.assistIds.includes(coachId))||(s.coachIds&&s.coachIds.includes(coachId))
@@ -1315,6 +1325,10 @@ export default function App(){
               </button>
               <button onClick={()=>setPayrollOpen(true)} style={{background:GRAY,border:`1px solid ${GRAY2}`,borderRadius:10,padding:'14px 16px',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',justifyContent:'space-between',color:WHITE}}>
                 <div style={{display:'flex',alignItems:'center',gap:10}}><span style={{fontSize:20}}>💵</span><span style={{fontSize:14,fontWeight:700}}>Payroll</span></div>
+                <span style={{color:DIM,fontSize:18}}>›</span>
+              </button>
+              <button onClick={()=>setRatesOpen(true)} style={{background:GRAY,border:`1px solid ${GRAY2}`,borderRadius:10,padding:'14px 16px',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',justifyContent:'space-between',color:WHITE}}>
+                <div style={{display:'flex',alignItems:'center',gap:10}}><span style={{fontSize:20}}>💲</span><span style={{fontSize:14,fontWeight:700}}>Pay Rates</span></div>
                 <span style={{color:DIM,fontSize:18}}>›</span>
               </button>
               <button onClick={()=>setShiftMgmtOpen(true)} style={{background:GRAY,border:`1px solid ${GRAY2}`,borderRadius:10,padding:'14px 16px',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',justifyContent:'space-between',color:WHITE}}>
@@ -1992,6 +2006,98 @@ export default function App(){
             </div>
           </div>
         )}
+
+        {/* Pay Rates Modal */}
+        <Modal open={ratesOpen} onClose={()=>setRatesOpen(false)} title="💲 Pay Rates" wide>
+          <div style={{fontSize:11,color:DIM,marginBottom:16,textTransform:'uppercase',letterSpacing:1,fontWeight:700}}>Coach Rates</div>
+          {coaches.map(coach=>{
+            const stored=coachRates[coach.id]||{}
+            const isSalaried=stored.salary??coach.name?.toLowerCase().includes('will')
+            return(
+              <div key={coach.id} style={{background:GRAY2,borderRadius:8,padding:'12px 14px',marginBottom:10}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+                  <span style={{fontWeight:700,fontSize:14}}>{coach.name}</span>
+                  <label style={{display:'flex',alignItems:'center',gap:6,fontSize:12,color:DIM,cursor:'pointer'}}>
+                    <input type="checkbox" checked={isSalaried}
+                      onChange={async e=>{
+                        const updated={...stored,salary:e.target.checked}
+                        await set(ref(db,`coachRates/${coach.id}`),updated)
+                      }}/>
+                    Salaried
+                  </label>
+                </div>
+                {isSalaried?(
+                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    <span style={{fontSize:13,color:DIM}}>Flat amount per period:</span>
+                    <div style={{display:'flex',alignItems:'center',gap:4}}>
+                      <span style={{color:DIM}}>$</span>
+                      <input type="number" style={{...inp,width:100,textAlign:'right'}}
+                        defaultValue={stored.salaryAmount??1500}
+                        onBlur={async e=>{
+                          const updated={...stored,salary:true,salaryAmount:parseFloat(e.target.value)||0}
+                          await set(ref(db,`coachRates/${coach.id}`),updated)
+                          setToast('Rate saved ✓')
+                        }}/>
+                    </div>
+                  </div>
+                ):(
+                  <div style={{display:'flex',gap:16,flexWrap:'wrap'}}>
+                    <div style={{display:'flex',alignItems:'center',gap:6}}>
+                      <span style={{fontSize:12,color:DIM,minWidth:80}}>Lead ($/hr):</span>
+                      <div style={{display:'flex',alignItems:'center',gap:4}}>
+                        <span style={{color:DIM}}>$</span>
+                        <input type="number" style={{...inp,width:70,textAlign:'right'}}
+                          defaultValue={stored.lead??20}
+                          onBlur={async e=>{
+                            const updated={...stored,lead:parseFloat(e.target.value)||0}
+                            await set(ref(db,`coachRates/${coach.id}`),updated)
+                            setToast('Rate saved ✓')
+                          }}/>
+                      </div>
+                    </div>
+                    <div style={{display:'flex',alignItems:'center',gap:6}}>
+                      <span style={{fontSize:12,color:DIM,minWidth:80}}>Assist ($/hr):</span>
+                      <div style={{display:'flex',alignItems:'center',gap:4}}>
+                        <span style={{color:DIM}}>$</span>
+                        <input type="number" style={{...inp,width:70,textAlign:'right'}}
+                          defaultValue={stored.assist??15}
+                          onBlur={async e=>{
+                            const updated={...stored,assist:parseFloat(e.target.value)||0}
+                            await set(ref(db,`coachRates/${coach.id}`),updated)
+                            setToast('Rate saved ✓')
+                          }}/>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+
+          <div style={{fontSize:11,color:DIM,marginTop:20,marginBottom:12,textTransform:'uppercase',letterSpacing:1,fontWeight:700}}>Global Session Rates</div>
+          {[
+            {key:'birthday',label:'🎂 Birthday (flat per party)'},
+            {key:'rental',label:'🏠 Rental ($/hr)'},
+            {key:'league',label:'⚽ League Game ($/hr per coach)'},
+          ].map(({key,label})=>(
+            <div key={key} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 0',borderBottom:`1px solid ${GRAY2}`}}>
+              <span style={{fontSize:13}}>{label}</span>
+              <div style={{display:'flex',alignItems:'center',gap:4}}>
+                <span style={{color:DIM}}>$</span>
+                <input type="number" style={{...inp,width:80,textAlign:'right'}}
+                  defaultValue={globalRates[key]}
+                  onBlur={async e=>{
+                    const updated={...globalRates,[key]:parseFloat(e.target.value)||0}
+                    await set(ref(db,'globalRates'),updated)
+                    setToast('Rate saved ✓')
+                  }}/>
+              </div>
+            </div>
+          ))}
+          <div style={{display:'flex',justifyContent:'flex-end',marginTop:20}}>
+            <Btn outline onClick={()=>setRatesOpen(false)}>Done</Btn>
+          </div>
+        </Modal>
 
         {/* Submit Payroll Confirmation */}
         {submitPayrollOpen&&(()=>{
