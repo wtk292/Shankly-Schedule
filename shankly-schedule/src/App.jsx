@@ -408,11 +408,20 @@ export default function App(){
   const[timeOffReqOpen,setTimeOffReqOpen]=useState(false)
   const blankSolo={client:'',date:'',time:'',dur:'60',coachId:'',notes:''}
   const blankGroup={name:'',repeat:'weekly',dow:'1',date:'',time:'',dur:'60',coachId:''}
+  const blankBirthday={clientName:'',date:'',time:'',coachId:'',notes:''}
+  const blankRental={name:'',date:'',time:'',dur:'60',coachId:'',notes:''}
+  const blankLeague={name:'',date:'',time:'',dur:'60',coachIds:[],notes:''}
   const blankEvent={title:'',date:'',startTime:'',endTime:'',coachIds:[],brand:'both'}
   const blankNewCoach={name:'',role:'mixed',pin:'',isAdmin:false}
   const blankTimeOffReq={startDate:'',endDate:'',reason:''}
   const[soloF,setSoloF]=useState(blankSolo)
   const[groupF,setGroupF]=useState(blankGroup)
+  const[birthdayF,setBirthdayF]=useState(blankBirthday)
+  const[rentalF,setRentalF]=useState(blankRental)
+  const[leagueF,setLeagueF]=useState(blankLeague)
+  const[birthdayOpen,setBirthdayOpen]=useState(false)
+  const[rentalOpen,setRentalOpen]=useState(false)
+  const[leagueOpen,setLeagueOpen]=useState(false)
   const[eventF,setEventF]=useState(blankEvent)
   const[editF,setEditF]=useState({})
   const[newCoach,setNewCoach]=useState(blankNewCoach)
@@ -464,6 +473,10 @@ export default function App(){
   function getSessionsForCoach(coachId,date){
     const dk=dateKey(date),dow=date.getDay()
     return sessions.filter(s=>{
+      // League sessions use coachIds array
+      if(s.type==='league')return s.coachIds&&s.coachIds.includes(coachId)&&s.date===dk
+      // Birthday and rental always have single coachId
+      if(s.type==='birthday'||s.type==='rental')return s.coachId===coachId&&s.date===dk
       if(s.coachId!==coachId)return false
       if(s.type==='solo')return s.date===dk
       if(s.repeat==='weekly')return s.dow===dow
@@ -595,6 +608,30 @@ export default function App(){
     else await set(ref(db,`availability/${availCoach}/${availDate}`),true)
     setToast(current?'Marked available':'Marked unavailable')
   }
+  async function saveBirthday(){
+    if(!birthdayF.clientName||!birthdayF.date||!birthdayF.time||!birthdayF.coachId){setToast('Fill in all required fields');return}
+    if(saving)return;setSaving(true)
+    await push(ref(db,'sessions'),{type:'birthday',clientName:birthdayF.clientName,date:birthdayF.date,time:birthdayF.time,coachId:birthdayF.coachId,notes:birthdayF.notes})
+    if(birthdayF.coachId!==loggedInCoach?.id)notifyCoach(birthdayF.coachId,'🎂 Birthday Party',`${birthdayF.clientName} · ${birthdayF.date} at ${fmt12(birthdayF.time)}`,db)
+    setBirthdayOpen(false);setBirthdayF(blankBirthday);setToast('Birthday added ✓');setSaving(false)
+  }
+
+  async function saveRental(){
+    if(!rentalF.name||!rentalF.date||!rentalF.time||!rentalF.coachId){setToast('Fill in all required fields');return}
+    if(saving)return;setSaving(true)
+    await push(ref(db,'sessions'),{type:'rental',name:rentalF.name,date:rentalF.date,time:rentalF.time,duration:parseInt(rentalF.dur),coachId:rentalF.coachId,notes:rentalF.notes})
+    if(rentalF.coachId!==loggedInCoach?.id)notifyCoach(rentalF.coachId,'🏠 Rental',`${rentalF.name} · ${rentalF.date} at ${fmt12(rentalF.time)}`,db)
+    setRentalOpen(false);setRentalF(blankRental);setToast('Rental added ✓');setSaving(false)
+  }
+
+  async function saveLeague(){
+    if(!leagueF.name||!leagueF.date||!leagueF.time||leagueF.coachIds.length===0){setToast('Fill in all required fields');return}
+    if(saving)return;setSaving(true)
+    await push(ref(db,'sessions'),{type:'league',name:leagueF.name,date:leagueF.date,time:leagueF.time,duration:parseInt(leagueF.dur),coachIds:leagueF.coachIds,notes:leagueF.notes})
+    leagueF.coachIds.filter(id=>id!==loggedInCoach?.id).forEach(id=>notifyCoach(id,'⚽ League Game',`${leagueF.name} · ${leagueF.date} at ${fmt12(leagueF.time)}`,db))
+    setLeagueOpen(false);setLeagueF(blankLeague);setToast('League game added ✓');setSaving(false)
+  }
+
   async function confirmSession(sessionId){
     await set(ref(db,`sessions/${sessionId}/confirmedBy/${loggedInCoach.id}`),true)
     const sess=sessions.find(s=>s.id===sessionId)
@@ -644,10 +681,7 @@ export default function App(){
       const messaging = getMessaging(getApp())
       const token = await getToken(messaging, { vapidKey: VAPID_KEY })
       if (token) await set(ref(db, `fcmTokens/${coachId}`), token)
-      onMessage(messaging, payload => {
-        const { title, body } = payload.notification || {}
-        if (title) setToast(`📬 ${title}`)
-      })
+      // Foreground messages handled by push banner on iOS
     } catch (err) {
       console.error('setupNotifications error:', err)
     }
@@ -825,11 +859,11 @@ export default function App(){
                             :sess.length===0
                               ?<div style={{fontSize:11,color:GRAY3,textAlign:'center',padding:'12px 0'}}>No sessions</div>
                               :sess.map(s=>(
-                                <div key={s.id} style={{background:GRAY2,borderRadius:6,padding:'7px 9px',marginBottom:5,borderLeft:`3px solid ${s.type==='solo'?BLUE:GOLD}`,position:'relative'}}>
+                                <div key={s.id} style={{background:GRAY2,borderRadius:6,padding:'7px 9px',marginBottom:5,borderLeft:`3px solid ${s.type==='solo'?BLUE:s.type==='birthday'?GREEN:s.type==='rental'?PURPLE:s.type==='league'?ORANGE:GOLD}`,position:'relative'}}>
                                   <div style={{fontSize:14,fontWeight:900,lineHeight:1}}>
                                     {fmt12(s.time)}
                                   </div>
-                                  <div style={{fontSize:10,color:DIM,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',maxWidth:'calc(100% - 38px)'}}>{s.type==='solo'?`1:1 · ${s.clientName}`:s.name}</div>
+                                  <div style={{fontSize:10,color:DIM,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',maxWidth:'calc(100% - 38px)'}}>{s.type==='solo'?`1:1 · ${s.clientName}`:s.type==='birthday'?`🎂 ${s.clientName}`:s.type==='rental'?`🏠 ${s.name}`:s.type==='league'?`⚽ ${s.name}`:s.name}</div>
                                   <div style={{marginTop:4}}>
                                     {s.confirmedBy?.[s.coachId]
                                       ?<span style={{fontSize:9,fontWeight:800,color:GREEN,background:'rgba(129,199,132,0.15)',padding:'2px 7px',borderRadius:10,letterSpacing:0.5}}>✓ Confirmed</span>
@@ -864,9 +898,9 @@ export default function App(){
                         {getAllSessionsOnDate(opsSelDay).sort((a,b)=>a.time>b.time?1:-1).map(s=>{
                           const coach=coaches.find(c=>c.id===s.coachId)
                           return(
-                            <div key={s.id} style={{background:GRAY2,borderRadius:6,padding:'8px 10px',marginBottom:6,borderLeft:`3px solid ${s.type==='solo'?BLUE:GOLD}`,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                            <div key={s.id} style={{background:GRAY2,borderRadius:6,padding:'8px 10px',marginBottom:6,borderLeft:`3px solid ${s.type==='solo'?BLUE:s.type==='birthday'?GREEN:s.type==='rental'?PURPLE:s.type==='league'?ORANGE:GOLD}`,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                               <div>
-                                <div style={{fontSize:13,fontWeight:700}}>{fmt12(s.time)} · {s.type==='solo'?`1:1 · ${s.clientName}`:s.name}</div>
+                                <div style={{fontSize:13,fontWeight:700}}>{fmt12(s.time)} · {s.type==='solo'?`1:1 · ${s.clientName}`:s.type==='birthday'?`🎂 ${s.clientName}`:s.type==='rental'?`🏠 ${s.name}`:s.type==='league'?`⚽ ${s.name}`:s.name}</div>
                                 <div style={{fontSize:11,color:DIM,marginTop:2}}>{coach?.name||'Unknown'}</div>
                               </div>
                               <div style={{display:'flex',gap:6}}>
@@ -1011,22 +1045,116 @@ export default function App(){
 
         {/* ── SESSION TYPE PICKER MODAL ── */}
         <Modal open={sessionTypeModal} onClose={()=>setSessionTypeModal(false)} title="Add Session">
-          <div style={{display:'flex',gap:12,marginTop:8}}>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginTop:8}}>
             <button onClick={()=>{setSessionTypeModal(false);setSoloF({...blankSolo,date:dateKey(opsDate),coachId:eligibleCoaches(['solo','mixed'])[0]?.id||''});setSoloOpen(true)}}
-              style={{flex:1,background:GRAY2,border:`1px solid ${BLUE}`,borderRadius:10,padding:'20px 10px',cursor:'pointer',fontFamily:'inherit',color:WHITE,display:'flex',flexDirection:'column',alignItems:'center',gap:8}}>
-              <span style={{fontSize:28}}>👤</span>
-              <span style={{fontSize:13,fontWeight:800,color:BLUE}}>1-on-1</span>
+              style={{background:GRAY2,border:`1px solid ${BLUE}`,borderRadius:10,padding:'18px 10px',cursor:'pointer',fontFamily:'inherit',color:WHITE,display:'flex',flexDirection:'column',alignItems:'center',gap:8}}>
+              <span style={{fontSize:26}}>👤</span>
+              <span style={{fontSize:12,fontWeight:800,color:BLUE}}>1-on-1</span>
             </button>
             <button onClick={()=>{setSessionTypeModal(false);setGroupF({...blankGroup,coachId:eligibleCoaches(['group','mixed'])[0]?.id||''});setGroupOpen(true)}}
-              style={{flex:1,background:GRAY2,border:`1px solid ${GOLD}`,borderRadius:10,padding:'20px 10px',cursor:'pointer',fontFamily:'inherit',color:WHITE,display:'flex',flexDirection:'column',alignItems:'center',gap:8}}>
-              <span style={{fontSize:28}}>👥</span>
-              <span style={{fontSize:13,fontWeight:800,color:GOLD}}>Group</span>
+              style={{background:GRAY2,border:`1px solid ${GOLD}`,borderRadius:10,padding:'18px 10px',cursor:'pointer',fontFamily:'inherit',color:WHITE,display:'flex',flexDirection:'column',alignItems:'center',gap:8}}>
+              <span style={{fontSize:26}}>👥</span>
+              <span style={{fontSize:12,fontWeight:800,color:GOLD}}>Group</span>
+            </button>
+            <button onClick={()=>{setSessionTypeModal(false);setBirthdayF({...blankBirthday,date:dateKey(opsDate),coachId:coaches[0]?.id||''});setBirthdayOpen(true)}}
+              style={{background:GRAY2,border:`1px solid ${GREEN}`,borderRadius:10,padding:'18px 10px',cursor:'pointer',fontFamily:'inherit',color:WHITE,display:'flex',flexDirection:'column',alignItems:'center',gap:8}}>
+              <span style={{fontSize:26}}>🎂</span>
+              <span style={{fontSize:12,fontWeight:800,color:GREEN}}>Birthday</span>
+            </button>
+            <button onClick={()=>{setSessionTypeModal(false);setRentalF({...blankRental,date:dateKey(opsDate),coachId:coaches[0]?.id||''});setRentalOpen(true)}}
+              style={{background:GRAY2,border:`1px solid ${PURPLE}`,borderRadius:10,padding:'18px 10px',cursor:'pointer',fontFamily:'inherit',color:WHITE,display:'flex',flexDirection:'column',alignItems:'center',gap:8}}>
+              <span style={{fontSize:26}}>🏠</span>
+              <span style={{fontSize:12,fontWeight:800,color:PURPLE}}>Rental</span>
+            </button>
+            <button onClick={()=>{setSessionTypeModal(false);setLeagueF({...blankLeague,date:dateKey(opsDate)});setLeagueOpen(true)}}
+              style={{background:GRAY2,border:`1px solid ${ORANGE}`,borderRadius:10,padding:'18px 10px',cursor:'pointer',fontFamily:'inherit',color:WHITE,display:'flex',flexDirection:'column',alignItems:'center',gap:8,gridColumn:'span 2'}}>
+              <span style={{fontSize:26}}>⚽</span>
+              <span style={{fontSize:12,fontWeight:800,color:ORANGE}}>League Game</span>
             </button>
           </div>
         </Modal>
 
         <SoloModal open={soloOpen} onClose={()=>setSoloOpen(false)} form={soloF} setForm={setSoloF} coaches={eligibleCoaches(['solo','mixed'])} onSave={saveSolo}/>
         <GroupModal open={groupOpen} onClose={()=>setGroupOpen(false)} form={groupF} setForm={setGroupF} coaches={eligibleCoaches(['group','mixed'])} onSave={saveGroup}/>
+
+        {/* Birthday Modal */}
+        <Modal open={birthdayOpen} onClose={()=>setBirthdayOpen(false)} title="🎂 Birthday Party">
+          <Field label="Client/Party Name *"><input style={inp} placeholder="e.g. Emma's Birthday" value={birthdayF.clientName} onChange={e=>setBirthdayF(f=>({...f,clientName:e.target.value}))}/></Field>
+          <Field label="Date *"><input type="date" style={inp} value={birthdayF.date} onChange={e=>setBirthdayF(f=>({...f,date:e.target.value}))}/></Field>
+          <Field label="Time *"><input style={inp} placeholder="e.g. 2pm, 10:30am" defaultValue={birthdayF.time?fmt12(birthdayF.time):''} onBlur={e=>{const t=parseTimeInput(e.target.value);if(t){e.target.value=fmt12(t);setBirthdayF(f=>({...f,time:t}))}}}/></Field>
+          <Field label="Coach *">
+            <select style={inp} value={birthdayF.coachId} onChange={e=>setBirthdayF(f=>({...f,coachId:e.target.value}))}>
+              <option value="">Select coach</option>
+              {coaches.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </Field>
+          <Field label="Notes"><input style={inp} placeholder="Any details" value={birthdayF.notes} onChange={e=>setBirthdayF(f=>({...f,notes:e.target.value}))}/></Field>
+          <div style={{background:'rgba(129,199,132,0.1)',border:`1px solid rgba(129,199,132,0.3)`,borderRadius:8,padding:'10px 14px',marginTop:8,fontSize:12,color:GREEN}}>
+            💰 Flat rate: <strong>$40</strong>
+          </div>
+          <div style={{display:'flex',gap:10,justifyContent:'flex-end',marginTop:16}}>
+            <Btn outline onClick={()=>setBirthdayOpen(false)}>Cancel</Btn>
+            <Btn gold onClick={saveBirthday}>Add Birthday</Btn>
+          </div>
+        </Modal>
+
+        {/* Rental Modal */}
+        <Modal open={rentalOpen} onClose={()=>setRentalOpen(false)} title="🏠 Rental">
+          <Field label="Rental Name *"><input style={inp} placeholder="e.g. Field Rental" value={rentalF.name} onChange={e=>setRentalF(f=>({...f,name:e.target.value}))}/></Field>
+          <Field label="Date *"><input type="date" style={inp} value={rentalF.date} onChange={e=>setRentalF(f=>({...f,date:e.target.value}))}/></Field>
+          <Field label="Time *"><input style={inp} placeholder="e.g. 5pm, 10:30am" defaultValue={rentalF.time?fmt12(rentalF.time):''} onBlur={e=>{const t=parseTimeInput(e.target.value);if(t){e.target.value=fmt12(t);setRentalF(f=>({...f,time:t}))}}}/></Field>
+          <Field label="Duration">
+            <select style={inp} value={rentalF.dur} onChange={e=>setRentalF(f=>({...f,dur:e.target.value}))}>
+              <option value="60">60 min</option><option value="90">90 min</option><option value="120">120 min</option><option value="180">3 hrs</option><option value="240">4 hrs</option>
+            </select>
+          </Field>
+          <Field label="Coach *">
+            <select style={inp} value={rentalF.coachId} onChange={e=>setRentalF(f=>({...f,coachId:e.target.value}))}>
+              <option value="">Select coach</option>
+              {coaches.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </Field>
+          <Field label="Notes"><input style={inp} placeholder="Any details" value={rentalF.notes} onChange={e=>setRentalF(f=>({...f,notes:e.target.value}))}/></Field>
+          <div style={{background:'rgba(156,39,176,0.1)',border:`1px solid rgba(156,39,176,0.3)`,borderRadius:8,padding:'10px 14px',marginTop:8,fontSize:12,color:PURPLE}}>
+            💰 Rate: <strong>$12/hr</strong> · {rentalF.dur} min = <strong>${(12*parseInt(rentalF.dur)/60).toFixed(2)}</strong>
+          </div>
+          <div style={{display:'flex',gap:10,justifyContent:'flex-end',marginTop:16}}>
+            <Btn outline onClick={()=>setRentalOpen(false)}>Cancel</Btn>
+            <Btn gold onClick={saveRental}>Add Rental</Btn>
+          </div>
+        </Modal>
+
+        {/* League Game Modal */}
+        <Modal open={leagueOpen} onClose={()=>setLeagueOpen(false)} title="⚽ League Game">
+          <Field label="Game/Event Name *"><input style={inp} placeholder="e.g. U12 League Game" value={leagueF.name} onChange={e=>setLeagueF(f=>({...f,name:e.target.value}))}/></Field>
+          <Field label="Date *"><input type="date" style={inp} value={leagueF.date} onChange={e=>setLeagueF(f=>({...f,date:e.target.value}))}/></Field>
+          <Field label="Time *"><input style={inp} placeholder="e.g. 9am, 2:30pm" defaultValue={leagueF.time?fmt12(leagueF.time):''} onBlur={e=>{const t=parseTimeInput(e.target.value);if(t){e.target.value=fmt12(t);setLeagueF(f=>({...f,time:t}))}}}/></Field>
+          <Field label="Duration">
+            <select style={inp} value={leagueF.dur} onChange={e=>setLeagueF(f=>({...f,dur:e.target.value}))}>
+              <option value="60">60 min</option><option value="90">90 min</option><option value="120">120 min</option><option value="180">3 hrs</option>
+            </select>
+          </Field>
+          <Field label="Coaches *">
+            <div style={{display:'flex',flexDirection:'column',gap:6,marginTop:4}}>
+              {coaches.map(c=>(
+                <label key={c.id} style={{display:'flex',alignItems:'center',gap:8,fontSize:13,cursor:'pointer',padding:'6px 10px',background:leagueF.coachIds.includes(c.id)?'rgba(245,197,24,0.1)':GRAY2,borderRadius:6,border:`1px solid ${leagueF.coachIds.includes(c.id)?GOLD:GRAY3}`}}>
+                  <input type="checkbox" checked={leagueF.coachIds.includes(c.id)} onChange={e=>{
+                    setLeagueF(f=>({...f,coachIds:e.target.checked?[...f.coachIds,c.id]:f.coachIds.filter(id=>id!==c.id)}))
+                  }}/>
+                  {c.name}
+                </label>
+              ))}
+            </div>
+          </Field>
+          <Field label="Notes"><input style={inp} placeholder="Any details" value={leagueF.notes} onChange={e=>setLeagueF(f=>({...f,notes:e.target.value}))}/></Field>
+          <div style={{background:'rgba(255,152,0,0.1)',border:`1px solid rgba(255,152,0,0.3)`,borderRadius:8,padding:'10px 14px',marginTop:8,fontSize:12,color:ORANGE}}>
+            💰 Rate: <strong>$10/hr per coach</strong> · {leagueF.dur} min = <strong>${(10*parseInt(leagueF.dur)/60).toFixed(2)}/coach</strong> · {leagueF.coachIds.length} coach{leagueF.coachIds.length!==1?'es':''}
+          </div>
+          <div style={{display:'flex',gap:10,justifyContent:'flex-end',marginTop:16}}>
+            <Btn outline onClick={()=>setLeagueOpen(false)}>Cancel</Btn>
+            <Btn gold onClick={saveLeague}>Add League Game</Btn>
+          </div>
+        </Modal>
         <EventModal open={eventOpen} onClose={()=>setEventOpen(false)} form={eventF} setForm={setEventF} coaches={coaches} onSave={saveEvent}/>
 
         <Modal open={editOpen} onClose={()=>setEditOpen(false)} title="Edit Session">
@@ -1376,17 +1504,17 @@ export default function App(){
                   {sess.length===0
                     ?<div style={{textAlign:'center',padding:'60px 20px',color:DIM}}>{unavail?'Unavailable':'No sessions today'}</div>
                     :sess.map(s=>(
-                      <div key={s.id} style={{background:GRAY,borderRadius:9,padding:'14px 16px',marginBottom:10,borderLeft:`3px solid ${s.type==='solo'?BLUE:GOLD}`,display:'flex',alignItems:'flex-start',gap:14}}>
+                      <div key={s.id} style={{background:GRAY,borderRadius:9,padding:'14px 16px',marginBottom:10,borderLeft:`3px solid ${s.type==='solo'?BLUE:s.type==='birthday'?GREEN:s.type==='rental'?PURPLE:s.type==='league'?ORANGE:GOLD}`,display:'flex',alignItems:'flex-start',gap:14}}>
                         <div style={{minWidth:64}}>
                           <div style={{fontSize:20,fontWeight:900,lineHeight:1}}>{fmt12(s.time)}</div>
                           <div style={{fontSize:10,color:DIM,marginTop:3}}>{s.duration}min</div>
                         </div>
                         <div style={{flex:1}}>
                           <div style={{fontSize:15,fontWeight:700,marginBottom:3,display:'flex',alignItems:'center',gap:6}}>
-                            {s.type==='solo'?`1-on-1 · ${s.clientName}`:s.name}
+                            {s.type==='solo'?`1-on-1 · ${s.clientName}`:s.type==='birthday'?`🎂 ${s.clientName}`:s.type==='rental'?`🏠 ${s.name}`:s.type==='league'?`⚽ ${s.name}`:s.name}
                             {s.confirmedBy?.[loggedInCoach.id]&&<span style={{fontSize:10,background:'rgba(129,199,132,0.2)',color:GREEN,padding:'1px 7px',borderRadius:10,fontWeight:700}}>✓ Confirmed</span>}
                           </div>
-                          <div style={{fontSize:11,color:DIM,marginBottom:s.confirmedBy?.[loggedInCoach.id]?0:10}}>{s.type==='solo'?(s.notes||'No notes'):`Group · ${s.duration}min`}</div>
+                          <div style={{fontSize:11,color:DIM,marginBottom:s.confirmedBy?.[loggedInCoach.id]?0:10}}>{s.type==='solo'?(s.notes||'No notes'):s.type==='birthday'?`Flat rate · $40`:s.type==='rental'?`Rental · $12/hr`:s.type==='league'?`League · $10/hr`:`Group · ${s.duration}min`}</div>
                           {!s.confirmedBy?.[loggedInCoach.id]&&(
                             <Btn gold onClick={()=>confirmSession(s.id)} style={{fontSize:11,padding:'5px 14px',marginTop:6}}>Confirm</Btn>
                           )}
@@ -1408,17 +1536,17 @@ export default function App(){
                     {sess.length===0
                       ?<div style={{fontSize:12,color:GRAY3,textAlign:'center',padding:'10px 0'}}>{unavail?'Unavailable':'No sessions'}</div>
                       :sess.map(s=>(
-                        <div key={s.id} style={{background:GRAY,borderRadius:9,padding:'12px 14px',marginBottom:7,borderLeft:`3px solid ${s.type==='solo'?BLUE:GOLD}`,display:'flex',alignItems:'flex-start',gap:12}}>
+                        <div key={s.id} style={{background:GRAY,borderRadius:9,padding:'12px 14px',marginBottom:7,borderLeft:`3px solid ${s.type==='solo'?BLUE:s.type==='birthday'?GREEN:s.type==='rental'?PURPLE:s.type==='league'?ORANGE:GOLD}`,display:'flex',alignItems:'flex-start',gap:12}}>
                           <div style={{minWidth:60}}>
                             <div style={{fontSize:19,fontWeight:900,lineHeight:1}}>{fmt12(s.time)}</div>
                             <div style={{fontSize:10,color:DIM,marginTop:2}}>{s.duration}min</div>
                           </div>
                           <div style={{flex:1}}>
                             <div style={{fontSize:14,fontWeight:700,marginBottom:2,display:'flex',alignItems:'center',gap:6}}>
-                              {s.type==='solo'?`1-on-1 · ${s.clientName}`:s.name}
+                              {s.type==='solo'?`1-on-1 · ${s.clientName}`:s.type==='birthday'?`🎂 ${s.clientName}`:s.type==='rental'?`🏠 ${s.name}`:s.type==='league'?`⚽ ${s.name}`:s.name}
                               {s.confirmedBy?.[loggedInCoach.id]&&<span style={{fontSize:10,background:'rgba(129,199,132,0.2)',color:GREEN,padding:'1px 7px',borderRadius:10,fontWeight:700}}>✓</span>}
                             </div>
-                            <div style={{fontSize:11,color:DIM,marginBottom:s.confirmedBy?.[loggedInCoach.id]?0:8}}>{s.type==='solo'?(s.notes||'No notes'):`Group · ${s.duration}min`}</div>
+                            <div style={{fontSize:11,color:DIM,marginBottom:s.confirmedBy?.[loggedInCoach.id]?0:8}}>{s.type==='solo'?(s.notes||'No notes'):s.type==='birthday'?`Flat rate · $40`:s.type==='rental'?`Rental · $12/hr`:s.type==='league'?`League · $10/hr`:`Group · ${s.duration}min`}</div>
                             {!s.confirmedBy?.[loggedInCoach.id]&&(
                               <Btn gold onClick={()=>confirmSession(s.id)} style={{fontSize:10,padding:'4px 12px',marginTop:4}}>Confirm</Btn>
                             )}
@@ -1441,8 +1569,8 @@ export default function App(){
                       {getSessionsForCoach(loggedInCoach.id,coachSelDay).length===0
                         ?<div style={{fontSize:12,color:DIM,textAlign:'center',padding:'12px 0'}}>No sessions this day</div>
                         :getSessionsForCoach(loggedInCoach.id,coachSelDay).map(s=>(
-                          <div key={s.id} style={{background:GRAY2,borderRadius:6,padding:'9px 11px',marginBottom:6,borderLeft:`3px solid ${s.type==='solo'?BLUE:GOLD}`}}>
-                            <div style={{fontSize:14,fontWeight:700}}>{fmt12(s.time)} · {s.type==='solo'?`1-on-1 · ${s.clientName}`:s.name}</div>
+                          <div key={s.id} style={{background:GRAY2,borderRadius:6,padding:'9px 11px',marginBottom:6,borderLeft:`3px solid ${s.type==='solo'?BLUE:s.type==='birthday'?GREEN:s.type==='rental'?PURPLE:s.type==='league'?ORANGE:GOLD}`}}>
+                            <div style={{fontSize:14,fontWeight:700}}>{fmt12(s.time)} · {s.type==='solo'?`1-on-1 · ${s.clientName}`:s.type==='birthday'?`🎂 ${s.clientName}`:s.type==='rental'?`🏠 ${s.name}`:s.type==='league'?`⚽ ${s.name}`:s.name}</div>
                             <div style={{fontSize:11,color:DIM,marginTop:2}}>{s.duration}min{s.type==='solo'&&s.notes?' · '+s.notes:''}</div>
                           </div>
                         ))
@@ -1583,10 +1711,10 @@ export default function App(){
                     <div style={{fontSize:10,fontWeight:800,letterSpacing:2,textTransform:'uppercase',color:DIM,marginBottom:12}}>All Sessions</div>
                     {allSess.map(s=>{
                       const coach=coaches.find(c=>c.id===s.coachId)
-                      return(<div key={s.id} style={{background:GRAY,borderRadius:9,padding:'12px 14px',marginBottom:8,borderLeft:`3px solid ${s.type==='solo'?BLUE:GOLD}`,display:'flex',alignItems:'center',gap:14}}>
+                      return(<div key={s.id} style={{background:GRAY,borderRadius:9,padding:'12px 14px',marginBottom:8,borderLeft:`3px solid ${s.type==='solo'?BLUE:s.type==='birthday'?GREEN:s.type==='rental'?PURPLE:s.type==='league'?ORANGE:GOLD}`,display:'flex',alignItems:'center',gap:14}}>
                         <div style={{minWidth:68}}><div style={{fontSize:18,fontWeight:900,lineHeight:1}}>{fmt12(s.time)}</div><div style={{fontSize:10,color:DIM,marginTop:2}}>{s.duration}min</div></div>
                         <div style={{flex:1}}>
-                          <div style={{fontSize:14,fontWeight:700}}>{s.type==='solo'?`1-on-1 · ${s.clientName}`:s.name}</div>
+                          <div style={{fontSize:14,fontWeight:700}}>{s.type==='solo'?`1-on-1 · ${s.clientName}`:s.type==='birthday'?`🎂 ${s.clientName}`:s.type==='rental'?`🏠 ${s.name}`:s.type==='league'?`⚽ ${s.name}`:s.name}</div>
                           <div style={{fontSize:11,color:DIM,marginTop:2}}>{coach?.name||'Unknown'}</div>
                         </div>
                       </div>)
