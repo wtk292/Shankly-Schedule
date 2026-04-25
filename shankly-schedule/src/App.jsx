@@ -1625,7 +1625,7 @@ export default function App(){
 
         {/* ── PAYROLL MODAL ── */}
         {payrollOpen&&(
-          <div style={{position:'fixed',inset:0,zIndex:200,background:'rgba(0,0,0,0.85)',display:'flex',flexDirection:'column'}}>
+          <div style={{position:'fixed',inset:0,zIndex:200,background:BLACK,display:'flex',flexDirection:'column'}}>
             <div style={{background:BLACK,borderBottom:`1px solid ${GRAY2}`,padding:'14px 16px',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
               <span style={{fontSize:16,fontWeight:900,color:GOLD,letterSpacing:2,textTransform:'uppercase'}}>💵 Payroll</span>
               <button onClick={()=>setPayrollOpen(false)} style={{background:'transparent',border:'none',color:DIM,fontSize:22,cursor:'pointer'}}>×</button>
