@@ -1,6 +1,6 @@
 importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js')
 importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging-compat.js')
- 
+
 firebase.initializeApp({
   apiKey: "AIzaSyCOao0HHSgr92kjqyvEoafEE3ozB_ygIWw",
   authDomain: "shankly-schedule.firebaseapp.com",
@@ -10,11 +10,17 @@ firebase.initializeApp({
   messagingSenderId: "939898424652",
   appId: "1:939898424652:web:e5d6923ea5b2d82c4a93e9"
 })
- 
+
 const messaging = firebase.messaging()
- 
+
 messaging.onBackgroundMessage(function(payload) {
   const { title, body } = payload.notification
+
+  // Increment badge count
+  if ('setAppBadge' in navigator) {
+    navigator.setAppBadge().catch(() => {})
+  }
+
   self.registration.showNotification(title, {
     body,
     icon: '/apple-touch-icon.png',
