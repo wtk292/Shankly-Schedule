@@ -2268,6 +2268,23 @@ export default function App(){
                 </div>
               )}
             </div>
+            <div style={{padding:'0 16px 4px'}}>
+              {(()=>{
+                const confirmedSessions=sessions.filter(s=>s.date&&isDateConfirmed(s.date))
+                const pay=calcCoachPayForPeriod(loggedInCoach.id,confirmedSessions)
+                const confirmedCount=Object.entries(confirmedDays).filter(([,v])=>v).length
+                if(pay===0&&confirmedCount===0) return null
+                return(
+                  <div style={{background:'rgba(245,197,24,0.08)',border:`1px solid rgba(245,197,24,0.2)`,borderRadius:10,padding:'12px 16px',marginBottom:12,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                    <div>
+                      <div style={{fontSize:10,fontWeight:800,letterSpacing:1.5,textTransform:'uppercase',color:DIM}}>Current Period Earnings</div>
+                      <div style={{fontSize:11,color:DIM,marginTop:2}}>{confirmedCount} day{confirmedCount!==1?'s':''} confirmed</div>
+                    </div>
+                    <div style={{fontSize:24,fontWeight:900,color:GOLD}}>${pay.toFixed(2)}</div>
+                  </div>
+                )
+              })()}
+            </div>
             <div style={{padding:'0 16px 16px'}}>
               {loading?<Spinner/>:coachCalView==='day'?(()=>{
                 const sess=getSessionsForCoach(loggedInCoach.id,coachDayDate)
