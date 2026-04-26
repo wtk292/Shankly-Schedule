@@ -945,7 +945,7 @@ export default function App(){
   },[loading,coaches])
 
   // ── SPLASH / LOADING ─────────────────────────────────────────────
-  if(loading||(!loggedInCoach&&localStorage.getItem('shankly_coach_id')))return(
+  if(loading||(view==='landing'&&!loggedInCoach&&localStorage.getItem('shankly_coach_id')))return(
     <div style={{...PAGE,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:'100svh',background:BLACK}}>
       <img src={LOGO_SRC} alt="Shankly Elite Training" style={{width:120,height:120,borderRadius:20,objectFit:'cover',marginBottom:20}}/>
       <div style={{fontSize:12,color:DIM,letterSpacing:3,textTransform:'uppercase'}}>Loading...</div>
