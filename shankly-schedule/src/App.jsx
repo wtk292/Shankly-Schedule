@@ -1006,7 +1006,6 @@ export default function App(){
   // ── OPS VIEW ──────────────────────────────────────────────────────
   if(view==='ops'){
     const pendingCount=pendingTimeOff.length
-    if(!opsTab)setOpsTab('schedule')
     return(
       <div style={{...PAGE,paddingBottom:'calc(72px + env(safe-area-inset-bottom))'}}>
         {/* ── OPS HEADER ── */}
