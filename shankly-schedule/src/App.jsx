@@ -1120,10 +1120,18 @@ export default function App(){
                                       {s.assistIds&&s.assistIds.length>0&&<span style={{fontSize:9,color:DIM,padding:'2px 6px'}}>{s.assistIds.length} assist{s.assistIds.length!==1?'s':''}</span>}
                                     </div>
                                   )}
-                                  <div style={{marginTop:4}}>
+                                  <div style={{marginTop:6,display:'flex',alignItems:'center',gap:6}}>
                                     {s.confirmedBy?.[s.coachId]
-                                      ?<span style={{fontSize:9,fontWeight:800,color:GREEN,background:'rgba(129,199,132,0.15)',padding:'2px 7px',borderRadius:10,letterSpacing:0.5}}>✓ Confirmed</span>
-                                      :<span style={{fontSize:9,fontWeight:800,color:ORANGE,background:'rgba(255,183,77,0.12)',padding:'2px 7px',borderRadius:10,letterSpacing:0.5}}>Not Confirmed</span>
+                                      ?<>
+                                        <span style={{fontSize:9,fontWeight:800,color:GREEN,background:'rgba(129,199,132,0.15)',padding:'2px 7px',borderRadius:10,letterSpacing:0.5}}>✓ Confirmed</span>
+                                        <button onClick={async()=>{await remove(ref(db,`sessions/${s.id}/confirmedBy/${s.coachId}`));setToast('Confirmation cleared')}}
+                                          style={{background:'transparent',border:`1px solid ${GRAY3}`,color:DIM,fontSize:9,padding:'1px 7px',borderRadius:10,cursor:'pointer',fontFamily:'inherit'}}>Clear</button>
+                                      </>
+                                      :<>
+                                        <span style={{fontSize:9,fontWeight:800,color:ORANGE,background:'rgba(255,183,77,0.12)',padding:'2px 7px',borderRadius:10,letterSpacing:0.5}}>Not Confirmed</span>
+                                        <button onClick={async()=>{await set(ref(db,`sessions/${s.id}/confirmedBy/${s.coachId}`),true);setToast('Confirmed ✓')}}
+                                          style={{background:'transparent',border:`1px solid ${GREEN}`,color:GREEN,fontSize:9,padding:'1px 7px',borderRadius:10,cursor:'pointer',fontFamily:'inherit'}}>Confirm</button>
+                                      </>
                                     }
                                   </div>
                                   <div style={{position:'absolute',top:4,right:4,display:'flex',gap:3}}>
