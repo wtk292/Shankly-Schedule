@@ -8,4 +8,5 @@
   NODE_VERSION = "18"
 
 [functions."daily-reminder"]
-  schedule = "0 20 * * *"
+  schedule = "0 19 * * *"
+
