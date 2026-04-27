@@ -7,5 +7,5 @@
 [build.environment]
   NODE_VERSION = "18"
 
-[context.production]
-  SECRETS_SCAN_SMART_DETECTION_ENABLED = "false"
+[functions."daily-reminder"]
+  schedule = "0 20 * * *"
