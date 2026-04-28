@@ -96,6 +96,19 @@ function parseTimeInput(raw){
   return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`
 }
 
+function fmtMsgTime(ts){
+  if(!ts) return ''
+  const d=new Date(ts)
+  const now=new Date()
+  const isToday=d.toDateString()===now.toDateString()
+  const yesterday=new Date(now); yesterday.setDate(now.getDate()-1)
+  const isYesterday=d.toDateString()===yesterday.toDateString()
+  const timeStr=d.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})
+  if(isToday) return timeStr
+  if(isYesterday) return `Yesterday ${timeStr}`
+  return `${d.toLocaleDateString([],{month:'short',day:'numeric'})} ${timeStr}`
+}
+
 function fmtTime(ts){const d=new Date(ts);return d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true})}
 function addDays(date,n){const d=new Date(date);d.setDate(d.getDate()+n);return d}
 
@@ -2544,7 +2557,7 @@ export default function App(){
                   return(<div key={m.id} style={{display:'flex',flexDirection:'column',alignItems:isMe?'flex-end':'flex-start'}}>
                     {!isMe&&<div style={{fontSize:10,color:DIM,marginBottom:3,paddingLeft:4}}>{m.coachName}</div>}
                     <div style={{background:isMe?GOLD:GRAY2,color:isMe?BLACK:WHITE,borderRadius:isMe?'14px 14px 4px 14px':'14px 14px 14px 4px',padding:'10px 14px',maxWidth:'80%',fontSize:14,lineHeight:1.5}}>{m.text}</div>
-                    <div style={{fontSize:10,color:DIM,marginTop:3,paddingLeft:4,paddingRight:4}}>{fmtTime(m.ts)}</div>
+                    <div style={{fontSize:10,color:DIM,marginTop:3,paddingLeft:4,paddingRight:4,textAlign:isMe?'right':'left'}}>{fmtMsgTime(m.ts)}</div>
                   </div>)
                 })
               }
