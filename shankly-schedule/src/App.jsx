@@ -553,6 +553,18 @@ export default function App(){
   function getEventsOnDate(dk){return events.filter(e=>e.date===dk)}
   function eligibleCoaches(roles){return coaches.filter(c=>roles.includes(c.role))}
   function isCoachAvailable(coachId,date){return!availability[coachId]?.[dateKey(date)]}
+  function isCoachOnTimeOff(coachId,date){
+    const dk=dateKey(date)
+    return timeOffRequests.some(r=>
+      r.coachId===coachId&&
+      r.status==='approved'&&
+      r.startDate<=dk&&
+      r.endDate>=dk
+    )
+  }
+  function isCoachSchedulable(coachId,date){
+    return isCoachAvailable(coachId,date)&&!isCoachOnTimeOff(coachId,date)
+  }
   function getSoloCount(coachId,period){
     const ws=getWeekStart(),we=getWeekEnd()
     return sessions.filter(s=>{
@@ -1039,7 +1051,10 @@ export default function App(){
           {opsTab==='schedule'&&(
             <div style={{display:'flex',alignItems:'center',gap:8,marginTop:10}}>
               <NavBtn onClick={()=>{const d=new Date(opsDate);d.setDate(d.getDate()-1);setOpsDate(d)}}>‹</NavBtn>
-              <span style={{fontSize:13,fontWeight:800,textTransform:'uppercase',flex:1,textAlign:'center'}}>{fmtLong(opsDate)}{isToday(opsDate)&&<span style={{background:GOLD,color:BLACK,fontSize:9,fontWeight:800,letterSpacing:1.5,textTransform:'uppercase',padding:'2px 7px',borderRadius:20,marginLeft:8}}>Today</span>}</span>
+              <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+                <span style={{fontSize:13,fontWeight:800,textTransform:'uppercase',textAlign:'center'}}>{fmtLong(opsDate)}{isToday(opsDate)&&<span style={{background:GOLD,color:BLACK,fontSize:9,fontWeight:800,letterSpacing:1.5,textTransform:'uppercase',padding:'2px 7px',borderRadius:20,marginLeft:8}}>Today</span>}</span>
+                {!isToday(opsDate)&&<button onClick={()=>setOpsDate(todayMidnight())} style={{background:'transparent',border:`1px solid ${GOLD}`,color:GOLD,fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:10,cursor:'pointer',fontFamily:'inherit',letterSpacing:0.5}}>Today</button>}
+              </div>
               <NavBtn onClick={()=>{const d=new Date(opsDate);d.setDate(d.getDate()+1);setOpsDate(d)}}>›</NavBtn>
               <Btn outline onClick={()=>setOpsDate(todayMidnight())} style={{fontSize:10,padding:'5px 10px'}}>Today</Btn>
             </div>
@@ -1099,7 +1114,7 @@ export default function App(){
                   <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(175px,1fr))',gap:10}}>
                   {coaches.map(coach=>{
                     const sess=getSessionsForCoach(coach.id,opsDate)
-                    const unavail=!isCoachAvailable(coach.id,opsDate)
+                    const unavail=!isCoachAvailable(coach.id,opsDate)||isCoachOnTimeOff(coach.id,opsDate)
                     const tagStyle=coach.role==='group'?{background:'rgba(245,197,24,0.13)',color:GOLD}:coach.role==='solo'?{background:'rgba(79,195,247,0.13)',color:BLUE}:{background:'rgba(129,199,132,0.13)',color:GREEN}
                     const tagText=coach.role==='group'?'GRP':coach.role==='solo'?'1:1':'MIX'
                     return(
@@ -1436,7 +1451,7 @@ export default function App(){
         {/* ── SESSION TYPE PICKER MODAL ── */}
         <Modal open={sessionTypeModal} onClose={()=>setSessionTypeModal(false)} title="Add Session">
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginTop:8}}>
-            <button onClick={()=>{setSessionTypeModal(false);setSoloF({...blankSolo,date:dateKey(opsDate),coachId:eligibleCoaches(['solo','mixed'])[0]?.id||''});setSoloOpen(true)}}
+            <button onClick={()=>{const eligible=eligibleCoaches(['solo','mixed']).filter(c=>isCoachSchedulable(c.id,new Date(dateKey(opsDate)+'T00:00:00')));setSessionTypeModal(false);setSoloF({...blankSolo,date:dateKey(opsDate),coachId:eligible[0]?.id||''});setSoloOpen(true)}}
               style={{background:GRAY2,border:`1px solid ${BLUE}`,borderRadius:10,padding:'18px 10px',cursor:'pointer',fontFamily:'inherit',color:WHITE,display:'flex',flexDirection:'column',alignItems:'center',gap:8}}>
               <span style={{fontSize:26}}>👤</span>
               <span style={{fontSize:12,fontWeight:800,color:BLUE}}>1-on-1</span>
@@ -1464,8 +1479,8 @@ export default function App(){
           </div>
         </Modal>
 
-        <SoloModal open={soloOpen} onClose={()=>setSoloOpen(false)} form={soloF} setForm={setSoloF} coaches={eligibleCoaches(['solo','mixed'])} onSave={saveSolo}/>
-        <GroupModal open={groupOpen} onClose={()=>setGroupOpen(false)} form={groupF} setForm={setGroupF} coaches={eligibleCoaches(['group','mixed'])} onSave={saveGroup}/>
+        <SoloModal open={soloOpen} onClose={()=>setSoloOpen(false)} form={soloF} setForm={setSoloF} coaches={eligibleCoaches(['solo','mixed']).filter(c=>!soloF.date||isCoachSchedulable(c.id,new Date(soloF.date+'T00:00:00')))} onSave={saveSolo}/>
+        <GroupModal open={groupOpen} onClose={()=>setGroupOpen(false)} form={groupF} setForm={setGroupF} coaches={eligibleCoaches(['group','mixed']).filter(c=>!groupF.date||isCoachSchedulable(c.id,new Date(groupF.date+'T00:00:00')))} onSave={saveGroup}/>
 
         {/* Birthday Modal */}
         <Modal open={birthdayOpen} onClose={()=>setBirthdayOpen(false)} title="🎂 Birthday Party">
@@ -1475,7 +1490,7 @@ export default function App(){
           <Field label="Coach *">
             <select style={inp} value={birthdayF.coachId} onChange={e=>setBirthdayF(f=>({...f,coachId:e.target.value}))}>
               <option value="">Select coach</option>
-              {coaches.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+              {coaches.filter(c=>!birthdayF.date||isCoachSchedulable(c.id,new Date(birthdayF.date+'T00:00:00'))).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </Field>
           <Field label="Notes"><input style={inp} placeholder="Any details" value={birthdayF.notes} onChange={e=>setBirthdayF(f=>({...f,notes:e.target.value}))}/></Field>
@@ -1501,7 +1516,7 @@ export default function App(){
           <Field label="Coach *">
             <select style={inp} value={rentalF.coachId} onChange={e=>setRentalF(f=>({...f,coachId:e.target.value}))}>
               <option value="">Select coach</option>
-              {coaches.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+              {coaches.filter(c=>!rentalF.date||isCoachSchedulable(c.id,new Date(rentalF.date+'T00:00:00'))).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </Field>
           <Field label="Notes"><input style={inp} placeholder="Any details" value={rentalF.notes} onChange={e=>setRentalF(f=>({...f,notes:e.target.value}))}/></Field>
@@ -1526,7 +1541,7 @@ export default function App(){
           </Field>
           <Field label="Coaches *">
             <div style={{display:'flex',flexDirection:'column',gap:6,marginTop:4}}>
-              {coaches.map(c=>(
+              {coaches.filter(c=>!leagueF.date||isCoachSchedulable(c.id,new Date(leagueF.date+'T00:00:00'))).map(c=>(
                 <label key={c.id} style={{display:'flex',alignItems:'center',gap:8,fontSize:13,cursor:'pointer',padding:'6px 10px',background:leagueF.coachIds.includes(c.id)?'rgba(245,197,24,0.1)':GRAY2,borderRadius:6,border:`1px solid ${leagueF.coachIds.includes(c.id)?GOLD:GRAY3}`}}>
                   <input type="checkbox" checked={leagueF.coachIds.includes(c.id)} onChange={e=>{
                     setLeagueF(f=>({...f,coachIds:e.target.checked?[...f.coachIds,c.id]:f.coachIds.filter(id=>id!==c.id)}))
