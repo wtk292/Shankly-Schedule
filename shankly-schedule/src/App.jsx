@@ -1148,15 +1148,15 @@ export default function App(){
                                     </div>
                                   )}
                                   <div style={{marginTop:6,display:'flex',alignItems:'center',gap:6}}>
-                                    {s.confirmedBy?.[s.coachId]
+                                    {s.confirmedBy?.[coach.id]
                                       ?<>
                                         <span style={{fontSize:9,fontWeight:800,color:GREEN,background:'rgba(129,199,132,0.15)',padding:'2px 7px',borderRadius:10,letterSpacing:0.5}}>✓ Confirmed</span>
-                                        <button onClick={async()=>{await remove(ref(db,`sessions/${s.id}/confirmedBy/${s.coachId}`));setToast('Confirmation cleared')}}
+                                        <button onClick={async()=>{await remove(ref(db,`sessions/${s.id}/confirmedBy/${coach.id}`));setToast('Confirmation cleared')}}
                                           style={{background:'transparent',border:`1px solid ${GRAY3}`,color:DIM,fontSize:9,padding:'1px 7px',borderRadius:10,cursor:'pointer',fontFamily:'inherit'}}>Clear</button>
                                       </>
                                       :<>
                                         <span style={{fontSize:9,fontWeight:800,color:ORANGE,background:'rgba(255,183,77,0.12)',padding:'2px 7px',borderRadius:10,letterSpacing:0.5}}>Not Confirmed</span>
-                                        <button onClick={async()=>{await set(ref(db,`sessions/${s.id}/confirmedBy/${s.coachId}`),true);setToast('Confirmed ✓')}}
+                                        <button onClick={async()=>{await set(ref(db,`sessions/${s.id}/confirmedBy/${coach.id}`),true);setToast('Confirmed ✓')}}
                                           style={{background:'transparent',border:`1px solid ${GREEN}`,color:GREEN,fontSize:9,padding:'1px 7px',borderRadius:10,cursor:'pointer',fontFamily:'inherit'}}>Confirm</button>
                                       </>
                                     }
@@ -1233,7 +1233,10 @@ export default function App(){
                 const d=new Date(s.date+'T00:00:00')
                 return d>=todayMidnight()
               })
-              const unconfirmed=upcoming.filter(s=>!s.confirmedBy?.[s.coachId])
+              const unconfirmed=upcoming.filter(s=>{
+                const allCoachIds=[s.coachId,...(s.assistIds||[]),...(s.coachIds||[])].filter(Boolean)
+                return allCoachIds.some(id=>!s.confirmedBy?.[id])
+              })
               if(unconfirmed.length===0) return(
                 <div style={{background:'rgba(129,199,132,0.1)',border:`1px solid rgba(129,199,132,0.3)`,borderRadius:10,padding:'14px 16px',marginBottom:16,display:'flex',alignItems:'center',gap:10}}>
                   <span style={{fontSize:20}}>✓</span>
