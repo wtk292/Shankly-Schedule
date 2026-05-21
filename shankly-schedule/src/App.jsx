@@ -596,7 +596,7 @@ export default function App(){
   }
   function openEdit(s){
     setEditSession(s)
-    setEditF({time:s.time,coachId:s.coachId,notes:s.notes||'',dur:String(s.duration),date:s.date||'',dow:String(s.dow||1),repeat:s.repeat,clientName:s.clientName||''})
+    setEditF({time:s.time,coachId:s.coachId,notes:s.notes||'',dur:String(s.duration),date:s.date||'',dow:String(s.dow||1),repeat:s.repeat,clientName:s.clientName||'',assistIds:s.assistIds||[]})
     setEditOpen(true)
   }
   const pendingTimeOff=timeOffRequests.filter(r=>r.status==='pending')
@@ -623,7 +623,7 @@ export default function App(){
   }
   async function saveEdit(){
     if(!editF.time||!editF.coachId){setToast('Fill in required fields');return}
-    const updates={...editSession,...editF,duration:parseInt(editF.dur||editSession.duration)}
+    const updates={...editSession,...editF,duration:parseInt(editF.dur||editSession.duration),assistIds:editF.assistIds||[]}
     delete updates.id
     await set(ref(db,`sessions/${editSession.id}`),updates)
     setEditOpen(false);setToast('Session updated ✓')
@@ -1616,6 +1616,23 @@ export default function App(){
             </Field>
             {editSession.type==='solo'&&<Field label="Client Name"><input style={inp} value={editF.clientName||''} onChange={e=>setEditF(f=>({...f,clientName:e.target.value}))}/></Field>}
             {editSession.type==='solo'&&<Field label="Notes"><input style={inp} value={editF.notes||''} onChange={e=>setEditF(f=>({...f,notes:e.target.value}))}/></Field>}
+            {editSession.type==='group'&&(
+              <Field label="Assist Coaches (optional)">
+                <div style={{display:'flex',flexDirection:'column',gap:5,marginTop:4}}>
+                  {coaches.filter(c=>c.id!==editF.coachId).map(c=>{
+                    const isAssist=(editF.assistIds||[]).includes(c.id)
+                    return(
+                      <label key={c.id} style={{display:'flex',alignItems:'center',gap:8,fontSize:13,cursor:'pointer',padding:'6px 10px',background:isAssist?'rgba(245,197,24,0.1)':GRAY2,borderRadius:6,border:`1px solid ${isAssist?GOLD:GRAY3}`}}>
+                        <input type="checkbox" checked={isAssist} onChange={e=>{
+                          setEditF(f=>({...f,assistIds:e.target.checked?[...(f.assistIds||[]),c.id]:(f.assistIds||[]).filter(id=>id!==c.id)}))
+                        }}/>
+                        {c.name} <span style={{fontSize:11,color:DIM}}>— Assist</span>
+                      </label>
+                    )
+                  })}
+                </div>
+              </Field>
+            )}
             <div style={{display:'flex',gap:10,justifyContent:'flex-end',marginTop:20}}>
               <Btn outline onClick={()=>setEditOpen(false)}>Cancel</Btn>
               <Btn gold onClick={saveEdit}>Save Changes</Btn>
