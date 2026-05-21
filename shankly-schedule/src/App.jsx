@@ -361,10 +361,10 @@ function GroupModal({open,onClose,form,setForm,coaches,onSave}){
   )
 }
 
-function EventModal({open,onClose,form,setForm,coaches,onSave}){
+function EventModal({open,onClose,form,setForm,coaches,onSave,isEdit=false}){
   function toggleCoach(id){const ids=form.coachIds||[];setForm(f=>({...f,coachIds:ids.includes(id)?ids.filter(x=>x!==id):[...ids,id]}))}
   return(
-    <Modal open={open} onClose={onClose} title="Add Facility Event">
+    <Modal open={open} onClose={onClose} title={isEdit?'Edit Facility Event':'Add Facility Event'}>
       <Field label="Event Title *"><input style={inp} value={form.title} onChange={e=>setForm(f=>({...f,title:e.target.value}))} placeholder="e.g. Adult League Night"/></Field>
       <Field label="Date *"><input type="date" style={inp} value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))}/></Field>
       <Field label="Start Time *"><input style={inp} placeholder="e.g. 9am, 2:30pm" defaultValue={form.startTime?fmt12(form.startTime):''} onBlur={e=>{const t=parseTimeInput(e.target.value);if(t){e.target.value=fmt12(t);setForm(f=>({...f,startTime:t}))}}} /></Field>
@@ -381,7 +381,7 @@ function EventModal({open,onClose,form,setForm,coaches,onSave}){
       </Field>
       <div style={{display:'flex',gap:10,justifyContent:'flex-end',marginTop:20}}>
         <Btn outline onClick={onClose}>Cancel</Btn>
-        <Btn gold onClick={onSave}>Add Event</Btn>
+        <Btn gold onClick={onSave}>{isEdit?'Save Changes':'Add Event'}</Btn>
       </div>
     </Modal>
   )
@@ -469,6 +469,7 @@ export default function App(){
   const[rentalOpen,setRentalOpen]=useState(false)
   const[leagueOpen,setLeagueOpen]=useState(false)
   const[eventF,setEventF]=useState(blankEvent)
+  const[editEventId,setEditEventId]=useState(null)
   const[editF,setEditF]=useState({})
   const[newCoach,setNewCoach]=useState(blankNewCoach)
   const[announceText,setAnnounceText]=useState('')
@@ -664,6 +665,11 @@ export default function App(){
     setEventOpen(false);setEventF(blankEvent);setToast('Event added ✓')
   }
   async function removeEvent(id){await remove(ref(db,`facEvents/${id}`));setToast('Event removed')}
+  async function updateEvent(){
+    if(!eventF.title||!eventF.date||!eventF.startTime){setToast('Fill in required fields');return}
+    await set(ref(db,`facEvents/${editEventId}`),{title:eventF.title,date:eventF.date,startTime:eventF.startTime,endTime:eventF.endTime,coachIds:eventF.coachIds,brand:eventF.brand})
+    setEditEventId(null);setEventF(blankEvent);setEventOpen(false);setToast('Event updated ✓')
+  }
   async function saveAnnouncement(){
     if(!announceText.trim()){setToast('Enter a message');return}
     await set(ref(db,'announcement'),{text:announceText.trim(),ts:Date.now()})
@@ -726,7 +732,7 @@ export default function App(){
     })
   }
 
-  function calcCoachPayForPeriod(coachId, periodSessions){
+  function calcCoachPayForPeriod(coachId, periodSessions, periodStart, periodEnd){
     const coach=coaches.find(c=>c.id===coachId)
     if(!coach) return 0
     const rates=getCoachRates(coach)
@@ -735,6 +741,14 @@ export default function App(){
     periodSessions.forEach(s=>{
       const isInvolved=s.coachId===coachId||(s.assistIds&&s.assistIds.includes(coachId))||(s.coachIds&&s.coachIds.includes(coachId))
       if(isInvolved) total+=calcSessionPay(s,coachId)
+    })
+    // Add claimed shifts in the period
+    shifts.forEach(s=>{
+      if(s.claimedBy!==coachId||!s.date||!s.rate) return
+      if(periodStart&&periodEnd&&(s.date<periodStart||s.date>periodEnd)) return
+      if(!periodStart&&!isDateConfirmed(s.date)) return
+      const hrs=(parseInt(s.duration)||60)/60
+      total+=s.rate*hrs
     })
     return total
   }
@@ -1426,10 +1440,32 @@ export default function App(){
                 <div style={{display:'flex',alignItems:'center',gap:10}}><span style={{fontSize:20}}>📢</span><span style={{fontSize:14,fontWeight:700}}>Announcement</span></div>
                 <span style={{color:DIM,fontSize:18}}>›</span>
               </button>
-              <button onClick={()=>setEventOpen(true)} style={{background:GRAY,border:`1px solid ${GRAY2}`,borderRadius:10,padding:'14px 16px',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',justifyContent:'space-between',color:WHITE}}>
-                <div style={{display:'flex',alignItems:'center',gap:10}}><span style={{fontSize:20}}>🏟️</span><span style={{fontSize:14,fontWeight:700}}>Facility Event</span></div>
-                <span style={{color:DIM,fontSize:18}}>›</span>
+              <button onClick={()=>{setEditEventId(null);setEventF(blankEvent);setEventOpen(true)}} style={{background:GRAY,border:`1px solid ${GRAY2}`,borderRadius:10,padding:'14px 16px',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',justifyContent:'space-between',color:WHITE}}>
+                <div style={{display:'flex',alignItems:'center',gap:10}}><span style={{fontSize:20}}>🏟️</span><span style={{fontSize:14,fontWeight:700}}>Add Facility Event</span></div>
+                <span style={{color:DIM,fontSize:18}}>+</span>
               </button>
+              {events.filter(e=>new Date(e.date+'T00:00:00')>=todayMidnight()).sort((a,b)=>a.date>b.date?1:-1).length>0&&(
+                <div style={{background:GRAY,border:`1px solid ${GRAY2}`,borderRadius:10,padding:'14px 16px'}}>
+                  <div style={{fontSize:10,fontWeight:800,letterSpacing:1.5,textTransform:'uppercase',color:DIM,marginBottom:10}}>Upcoming Events</div>
+                  {events.filter(e=>new Date(e.date+'T00:00:00')>=todayMidnight()).sort((a,b)=>a.date>b.date?1:-1).map(e=>{
+                    const bc=e.brand==='goalz'?GOLD:e.brand==='shankly'?GREEN:PURPLE
+                    return(
+                      <div key={e.id} style={{background:GRAY2,borderRadius:8,padding:'10px 12px',marginBottom:6,borderLeft:`3px solid ${bc}`,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                        <div>
+                          <div style={{fontSize:13,fontWeight:700}}>{e.title}</div>
+                          <div style={{fontSize:11,color:DIM,marginTop:2}}>{e.date} · {fmt12(e.startTime)}{e.endTime?' – '+fmt12(e.endTime):''}</div>
+                        </div>
+                        <div style={{display:'flex',gap:6}}>
+                          <button onClick={()=>{setEditEventId(e.id);setEventF({title:e.title,date:e.date,startTime:e.startTime,endTime:e.endTime||'',coachIds:e.coachIds||[],brand:e.brand||'both'});setEventOpen(true)}}
+                            style={{background:'transparent',border:`1px solid ${GRAY3}`,color:DIM,fontSize:11,padding:'3px 8px',borderRadius:6,cursor:'pointer',fontFamily:'inherit'}}>Edit</button>
+                          <button onClick={async()=>{await removeEvent(e.id)}}
+                            style={{background:'transparent',border:`1px solid rgba(255,59,48,0.3)`,color:RED,fontSize:11,padding:'3px 8px',borderRadius:6,cursor:'pointer',fontFamily:'inherit'}}>Delete</button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
               <button onClick={()=>setPayrollOpen(true)} style={{background:GRAY,border:`1px solid ${GRAY2}`,borderRadius:10,padding:'14px 16px',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',justifyContent:'space-between',color:WHITE}}>
                 <div style={{display:'flex',alignItems:'center',gap:10}}><span style={{fontSize:20}}>💵</span><span style={{fontSize:14,fontWeight:700}}>Payroll</span></div>
                 <span style={{color:DIM,fontSize:18}}>›</span>
@@ -1563,7 +1599,7 @@ export default function App(){
             <Btn gold onClick={saveLeague}>Add League Game</Btn>
           </div>
         </Modal>
-        <EventModal open={eventOpen} onClose={()=>setEventOpen(false)} form={eventF} setForm={setEventF} coaches={coaches} onSave={saveEvent}/>
+        <EventModal open={eventOpen} onClose={()=>{setEventOpen(false);setEditEventId(null);setEventF(blankEvent)}} form={eventF} setForm={setEventF} coaches={coaches} onSave={editEventId?updateEvent:saveEvent} isEdit={!!editEventId}/>
 
         <Modal open={editOpen} onClose={()=>setEditOpen(false)} title="Edit Session">
           {editSession&&<>
@@ -1798,7 +1834,7 @@ export default function App(){
                 <div key={s.id} style={{background:GRAY2,borderRadius:8,padding:'12px 14px',marginBottom:8,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                   <div>
                     <div style={{fontWeight:700,fontSize:13}}>{s.title}</div>
-                    <div style={{fontSize:11,color:DIM,marginTop:2}}>{s.date} · {fmt12(s.time)}{s.claimedBy?` · ✅ ${coaches.find(c=>c.id===s.claimedBy)?.name||'Claimed'}`:' · Open'}</div>
+                    <div style={{fontSize:11,color:DIM,marginTop:2}}>{s.date} · {fmt12(s.time)}{s.rate?` · $${s.rate}/hr`:''}{s.claimedBy?` · ✅ ${coaches.find(c=>c.id===s.claimedBy)?.name||'Claimed'}`:' · Open'}</div>
                   </div>
                   <button onClick={async()=>{await remove(ref(db,`shifts/${s.id}`));setToast('Shift removed')}}
                     style={{background:'transparent',border:'none',color:GRAY3,cursor:'pointer',fontSize:18}}
@@ -1822,6 +1858,9 @@ export default function App(){
                 <option value="120">120 min</option>
                 <option value="180">3 hours</option>
               </select>
+            </Field>
+            <Field label="Pay Rate ($/hr)">
+              <input type="number" style={inp} placeholder="e.g. 20" value={newShift.rate||''} onChange={e=>setNewShift(f=>({...f,rate:parseFloat(e.target.value)||0}))}/>
             </Field>
             <Field label="Notes"><input style={inp} placeholder="Any extra details" value={newShift.notes} onChange={e=>setNewShift(f=>({...f,notes:e.target.value}))}/></Field>
             <div style={{display:'flex',gap:10,justifyContent:'flex-end',marginTop:16}}>
