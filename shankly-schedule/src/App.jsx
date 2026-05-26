@@ -435,6 +435,9 @@ export default function App(){
   const[editPeriodData,setEditPeriodData]=useState({})
   const[submitPayrollOpen,setSubmitPayrollOpen]=useState(false)
   const[ledgerSort,setLedgerSort]=useState('newest')
+  const[timeOffView,setTimeOffView]=useState('list')
+  const[timeOffCalMonth,setTimeOffCalMonth]=useState({year:new Date().getFullYear(),month:new Date().getMonth()})
+  const[timeOffSelDay,setTimeOffSelDay]=useState(null)
   const[coachCalMonth,setCoachCalMonth]=useState({year:new Date().getFullYear(),month:new Date().getMonth()})
   const[coachSelDay,setCoachSelDay]=useState(null)
   const[facCalMonth,setFacCalMonth]=useState({year:new Date().getFullYear(),month:new Date().getMonth()})
@@ -1377,52 +1380,165 @@ export default function App(){
         })()}
 
         {/* ── TIME OFF TAB ── */}
-        {opsTab==='timeoff'&&(
+        {opsTab==='timeoff'&&(()=>{
+          const coachColorMap={}
+          coaches.forEach((c,i)=>{coachColorMap[c.id]=['#F5C518','#4FC3F7','#81C784','#FF8A65','#CE93D8','#F48FB1','#80CBC4','#FFD54F'][i%8]})
+          const approvedTimeOff=allTimeOff.filter(r=>r.status==='approved')
+
+          function getTimeOffOnDate(dk){
+            return approvedTimeOff.filter(r=>r.startDate<=dk&&r.endDate>=dk)
+          }
+
+          return(
           <div style={{padding:16}}>
-            <div style={{fontSize:12,fontWeight:700,letterSpacing:1.5,textTransform:'uppercase',color:DIM,marginBottom:14}}>Time Off Requests</div>
-            {pendingTimeOff.length===0&&allTimeOff.filter(r=>r.status!=='pending').length===0
-              ?<div style={{textAlign:'center',padding:'60px 20px',color:DIM}}>No time off requests</div>
-              :<>
-                {pendingTimeOff.length>0&&(
-                  <>
-                    <div style={{fontSize:10,fontWeight:800,letterSpacing:1.5,textTransform:'uppercase',color:ORANGE,marginBottom:8}}>Pending</div>
-                    {pendingTimeOff.map(r=>(
-                      <div key={r.id} style={{background:GRAY,borderRadius:10,padding:'12px 14px',marginBottom:8,border:`1px solid rgba(255,183,77,0.3)`}}>
-                        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:6}}>
-                          <div>
-                            <div style={{fontWeight:700,fontSize:13}}>{r.coachName}</div>
-                            <div style={{fontSize:11,color:DIM,marginTop:2}}>{r.startDate} → {r.endDate}</div>
-                            {r.reason&&<div style={{fontSize:11,color:WHITE,marginTop:4,fontStyle:'italic'}}>"{r.reason}"</div>}
+            {/* View toggle */}
+            <div style={{display:'flex',gap:0,marginBottom:16,background:GRAY2,borderRadius:8,padding:2}}>
+              {['list','calendar'].map(v=>(
+                <button key={v} onClick={()=>setTimeOffView(v)}
+                  style={{flex:1,background:timeOffView===v?GRAY:'transparent',border:'none',color:timeOffView===v?WHITE:DIM,padding:'7px 0',borderRadius:6,cursor:'pointer',fontFamily:'inherit',fontSize:12,fontWeight:timeOffView===v?700:400,textTransform:'capitalize',transition:'all 0.15s'}}>
+                  {v==='list'?'Requests':'Calendar'}
+                </button>
+              ))}
+            </div>
+
+            {/* CALENDAR VIEW */}
+            {timeOffView==='calendar'&&(
+              <div>
+                {/* Month nav */}
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+                  <NavBtn onClick={()=>setTimeOffCalMonth(m=>{const d=new Date(m.year,m.month-1);return{year:d.getFullYear(),month:d.getMonth()}})}>‹</NavBtn>
+                  <span style={{fontSize:13,fontWeight:800,textTransform:'uppercase'}}>{new Date(timeOffCalMonth.year,timeOffCalMonth.month).toLocaleString('default',{month:'long',year:'numeric'})}</span>
+                  <NavBtn onClick={()=>setTimeOffCalMonth(m=>{const d=new Date(m.year,m.month+1);return{year:d.getFullYear(),month:d.getMonth()}})}>›</NavBtn>
+                </div>
+
+                {/* Day headers */}
+                <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',marginBottom:4}}>
+                  {['S','M','T','W','T','F','S'].map((d,i)=>(
+                    <div key={i} style={{textAlign:'center',fontSize:10,fontWeight:700,color:DIM,padding:'4px 0'}}>{d}</div>
+                  ))}
+                </div>
+
+                {/* Calendar grid */}
+                {(()=>{
+                  const year=timeOffCalMonth.year,month=timeOffCalMonth.month
+                  const firstDay=new Date(year,month,1).getDay()
+                  const daysInMonth=new Date(year,month+1,0).getDate()
+                  const cells=[]
+                  for(let i=0;i<firstDay;i++) cells.push(null)
+                  for(let d=1;d<=daysInMonth;d++) cells.push(d)
+                  while(cells.length%7!==0) cells.push(null)
+
+                  return(
+                    <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2}}>
+                      {cells.map((d,i)=>{
+                        if(!d) return <div key={i}/>
+                        const dk=`${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`
+                        const offs=getTimeOffOnDate(dk)
+                        const isToday=dk===dateKey(new Date())
+                        const isSelected=timeOffSelDay===dk
+                        return(
+                          <div key={i} onClick={()=>setTimeOffSelDay(isSelected?null:dk)}
+                            style={{background:isSelected?'rgba(245,197,24,0.15)':GRAY,borderRadius:6,padding:'4px 2px',cursor:offs.length>0?'pointer':'default',border:`1px solid ${isSelected?GOLD:isToday?'rgba(245,197,24,0.4)':GRAY2}`,minHeight:48,display:'flex',flexDirection:'column',alignItems:'center'}}>
+                            <div style={{fontSize:11,fontWeight:isToday?800:400,color:isToday?GOLD:WHITE,marginBottom:2}}>{d}</div>
+                            <div style={{display:'flex',flexWrap:'wrap',gap:2,justifyContent:'center'}}>
+                              {offs.slice(0,3).map(r=>(
+                                <div key={r.id} style={{width:8,height:8,borderRadius:'50%',background:coachColorMap[r.coachId]||DIM}}/>
+                              ))}
+                              {offs.length>3&&<div style={{fontSize:8,color:DIM}}>+{offs.length-3}</div>}
+                            </div>
                           </div>
-                          <div style={{display:'flex',gap:6}}>
-                            <Btn gold onClick={()=>approveTimeOff(r)} style={{fontSize:11,padding:'5px 10px'}}>Approve</Btn>
-                            <Btn danger onClick={()=>denyTimeOff(r.id,r)} style={{fontSize:11,padding:'5px 10px'}}>Deny</Btn>
+                        )
+                      })}
+                    </div>
+                  )
+                })()}
+
+                {/* Selected day detail */}
+                {timeOffSelDay&&(()=>{
+                  const offs=getTimeOffOnDate(timeOffSelDay)
+                  if(offs.length===0) return null
+                  return(
+                    <div style={{marginTop:14,background:GRAY,borderRadius:10,padding:'12px 14px',border:`1px solid ${GRAY2}`}}>
+                      <div style={{fontSize:11,fontWeight:800,color:GOLD,marginBottom:8,textTransform:'uppercase',letterSpacing:1}}>{timeOffSelDay}</div>
+                      {offs.map(r=>(
+                        <div key={r.id} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 0',borderBottom:`1px solid ${GRAY2}`}}>
+                          <div style={{width:10,height:10,borderRadius:'50%',background:coachColorMap[r.coachId]||DIM,flexShrink:0}}/>
+                          <div>
+                            <div style={{fontSize:13,fontWeight:700}}>{r.coachName}</div>
+                            <div style={{fontSize:11,color:DIM}}>{r.startDate} → {r.endDate}</div>
                           </div>
                         </div>
-                      </div>
-                    ))}
-                  </>
-                )}
-                {allTimeOff.filter(r=>r.status!=='pending').length>0&&(
-                  <>
-                    <div style={{fontSize:10,fontWeight:800,letterSpacing:1.5,textTransform:'uppercase',color:DIM,marginBottom:8,marginTop:16}}>Resolved</div>
-                    {allTimeOff.filter(r=>r.status!=='pending').map(r=>(
-                      <div key={r.id} style={{background:GRAY,borderRadius:10,padding:'12px 14px',marginBottom:8,border:`1px solid ${GRAY2}`,opacity:0.7}}>
-                        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                          <div>
-                            <div style={{fontWeight:700,fontSize:13}}>{r.coachName}</div>
-                            <div style={{fontSize:11,color:DIM,marginTop:2}}>{r.startDate} → {r.endDate}</div>
+                      ))}
+                    </div>
+                  )
+                })()}
+
+                {/* Legend */}
+                <div style={{marginTop:14,display:'flex',flexWrap:'wrap',gap:8}}>
+                  {coaches.filter(c=>approvedTimeOff.some(r=>r.coachId===c.id)).map(c=>(
+                    <div key={c.id} style={{display:'flex',alignItems:'center',gap:4,fontSize:11,color:DIM}}>
+                      <div style={{width:8,height:8,borderRadius:'50%',background:coachColorMap[c.id]}}/>
+                      {c.name.split(' ')[0]}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* LIST VIEW */}
+            {timeOffView==='list'&&(
+              <>
+                {pendingTimeOff.length===0&&allTimeOff.filter(r=>r.status!=='pending').length===0
+                  ?<div style={{textAlign:'center',padding:'60px 20px',color:DIM}}>No time off requests</div>
+                  :<>
+                    {pendingTimeOff.length>0&&(
+                      <>
+                        <div style={{fontSize:10,fontWeight:800,letterSpacing:1.5,textTransform:'uppercase',color:ORANGE,marginBottom:8}}>Pending</div>
+                        {pendingTimeOff.map(r=>(
+                          <div key={r.id} style={{background:GRAY,borderRadius:10,padding:'12px 14px',marginBottom:8,border:`1px solid rgba(255,183,77,0.3)`}}>
+                            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:6}}>
+                              <div>
+                                <div style={{display:'flex',alignItems:'center',gap:6}}>
+                                  <div style={{width:8,height:8,borderRadius:'50%',background:coachColorMap[r.coachId]||DIM}}/>
+                                  <div style={{fontWeight:700,fontSize:13}}>{r.coachName}</div>
+                                </div>
+                                <div style={{fontSize:11,color:DIM,marginTop:2}}>{r.startDate} → {r.endDate}</div>
+                                {r.reason&&<div style={{fontSize:11,color:WHITE,marginTop:4,fontStyle:'italic'}}>"{r.reason}"</div>}
+                              </div>
+                              <div style={{display:'flex',gap:6}}>
+                                <Btn gold onClick={()=>approveTimeOff(r)} style={{fontSize:11,padding:'5px 10px'}}>Approve</Btn>
+                                <Btn danger onClick={()=>denyTimeOff(r.id,r)} style={{fontSize:11,padding:'5px 10px'}}>Deny</Btn>
+                              </div>
+                            </div>
                           </div>
-                          <span style={{fontSize:11,fontWeight:800,color:r.status==='approved'?GREEN:RED,textTransform:'uppercase'}}>{r.status}</span>
-                        </div>
-                      </div>
-                    ))}
+                        ))}
+                      </>
+                    )}
+                    {allTimeOff.filter(r=>r.status!=='pending').length>0&&(
+                      <>
+                        <div style={{fontSize:10,fontWeight:800,letterSpacing:1.5,textTransform:'uppercase',color:DIM,marginBottom:8,marginTop:pendingTimeOff.length>0?16:0}}>Resolved</div>
+                        {allTimeOff.filter(r=>r.status!=='pending').sort((a,b)=>b.submittedAt-a.submittedAt).map(r=>(
+                          <div key={r.id} style={{background:GRAY,borderRadius:10,padding:'12px 14px',marginBottom:8,border:`1px solid ${GRAY2}`,opacity:0.8}}>
+                            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                              <div>
+                                <div style={{display:'flex',alignItems:'center',gap:6}}>
+                                  <div style={{width:8,height:8,borderRadius:'50%',background:coachColorMap[r.coachId]||DIM}}/>
+                                  <div style={{fontWeight:700,fontSize:13}}>{r.coachName}</div>
+                                </div>
+                                <div style={{fontSize:11,color:DIM,marginTop:2}}>{r.startDate} → {r.endDate}</div>
+                              </div>
+                              <span style={{fontSize:11,fontWeight:800,color:r.status==='approved'?GREEN:RED,textTransform:'uppercase'}}>{r.status}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </>
+                    )}
                   </>
-                )}
+                }
               </>
-            }
+            )}
           </div>
-        )}
+        )})()}
 
         {/* ── MANAGE TAB ── */}
         {opsTab==='manage'&&(
