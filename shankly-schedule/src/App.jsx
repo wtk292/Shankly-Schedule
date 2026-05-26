@@ -1382,7 +1382,7 @@ export default function App(){
         {/* ── TIME OFF TAB ── */}
         {opsTab==='timeoff'&&(()=>{
           const coachColorMap={}
-          coaches.forEach((c,i)=>{coachColorMap[c.id]=['#F5C518','#4FC3F7','#81C784','#FF8A65','#CE93D8','#F48FB1','#80CBC4','#FFD54F'][i%8]})
+          coaches.forEach((c,i)=>{coachColorMap[c.id]=['#F5C518','#4FC3F7','#81C784','#FF8A65','#CE93D8','#F48FB1','#80CBC4','#FFD54F','#E57373','#AED581','#4DB6AC','#FF8F00','#7986CB','#A1887F','#90A4AE','#DCE775'][i%16]})
           const approvedTimeOff=allTimeOff.filter(r=>r.status==='approved')
 
           function getTimeOffOnDate(dk){
