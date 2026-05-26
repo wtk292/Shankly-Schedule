@@ -1476,9 +1476,9 @@ export default function App(){
                 {/* Legend */}
                 <div style={{marginTop:14,display:'flex',flexWrap:'wrap',gap:8}}>
                   {coaches.filter(c=>approvedTimeOff.some(r=>r.coachId===c.id)).map(c=>(
-                    <div key={c.id} style={{display:'flex',alignItems:'center',gap:4,fontSize:11,color:DIM}}>
-                      <div style={{width:8,height:8,borderRadius:'50%',background:coachColorMap[c.id]}}/>
-                      {c.name.split(' ')[0]}
+                    <div key={c.id} style={{display:'flex',alignItems:'center',gap:4,fontSize:11,color:WHITE}}>
+                      <div style={{width:10,height:10,borderRadius:'50%',background:coachColorMap[c.id],flexShrink:0}}/>
+                      {c.name}
                     </div>
                   ))}
                 </div>
