@@ -526,10 +526,9 @@ export default function App(){
 
   function getSessionsForCoach(coachId,date){
     const dk=dateKey(date),dow=date.getDay()
-    return sessions.filter(s=>{
+    const regularSessions=sessions.filter(s=>{
       if(s.type==='league')return s.coachIds&&s.coachIds.includes(coachId)&&s.date===dk
       if(s.type==='birthday'||s.type==='rental')return s.coachId===coachId&&s.date===dk
-      // Group: coach can be lead or assist
       if(s.type==='group'){
         const isLead=s.coachId===coachId
         const isAssist=s.assistIds&&s.assistIds.includes(coachId)
@@ -543,7 +542,10 @@ export default function App(){
       if(s.repeat==='weekly')return s.dow===dow
       if(s.repeat==='once')return s.date===dk
       return false
-    }).sort((a,b)=>a.time>b.time?1:-1)
+    })
+    // Include claimed shifts for this coach on this date
+    const claimedShifts=shifts.filter(s=>s.claimedBy===coachId&&s.date===dk).map(s=>({...s,type:'shift',isShift:true}))
+    return [...regularSessions,...claimedShifts].sort((a,b)=>a.time>b.time?1:-1)
   }
   function getAllSessionsOnDate(date){
     const dk=dateKey(date),dow=date.getDay()
@@ -1152,11 +1154,11 @@ export default function App(){
                             :sess.length===0
                               ?<div style={{fontSize:11,color:GRAY3,textAlign:'center',padding:'12px 0'}}>No sessions</div>
                               :sess.map(s=>(
-                                <div key={s.id} style={{background:GRAY2,borderRadius:6,padding:'7px 9px',marginBottom:5,borderLeft:`3px solid ${s.type==='solo'?BLUE:s.type==='birthday'?GREEN:s.type==='rental'?PURPLE:s.type==='league'?ORANGE:GOLD}`,position:'relative'}}>
+                                <div key={s.id} style={{background:GRAY2,borderRadius:6,padding:'7px 9px',marginBottom:5,borderLeft:`3px solid ${s.type==='solo'?BLUE:s.type==='birthday'?GREEN:s.type==='rental'?PURPLE:s.type==='league'?ORANGE:s.type==='shift'?'#FFD54F':GOLD}`,position:'relative'}}>
                                   <div style={{fontSize:14,fontWeight:900,lineHeight:1}}>
                                     {fmt12(s.time)}
                                   </div>
-                                  <div style={{fontSize:10,color:DIM,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',maxWidth:'calc(100% - 38px)'}}>{s.type==='solo'?`1:1 · ${s.clientName}`:s.type==='birthday'?`🎂 ${s.clientName}`:s.type==='rental'?`🏠 ${s.name}`:s.type==='league'?`⚽ ${s.name}`:s.type==='group'?`👥 ${s.name}`:s.name}</div>
+                                  <div style={{fontSize:10,color:DIM,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',maxWidth:'calc(100% - 38px)'}}>{s.type==='solo'?`1:1 · ${s.clientName}`:s.type==='birthday'?`🎂 ${s.clientName}`:s.type==='rental'?`🏠 ${s.name}`:s.type==='league'?`⚽ ${s.name}`:s.type==='shift'?`🟡 ${s.title}`:s.type==='group'?`👥 ${s.name}`:s.name}</div>
                                   {s.type==='group'&&(
                                     <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:3}}>
                                       {s.coachId===coach.id&&<span style={{fontSize:9,fontWeight:800,color:GOLD,background:'rgba(245,197,24,0.12)',padding:'2px 6px',borderRadius:8}}>Lead</span>}
@@ -1164,7 +1166,13 @@ export default function App(){
                                       {s.assistIds&&s.assistIds.length>0&&<span style={{fontSize:9,color:DIM,padding:'2px 6px'}}>{s.assistIds.length} assist{s.assistIds.length!==1?'s':''}</span>}
                                     </div>
                                   )}
-                                  <div style={{marginTop:6,display:'flex',alignItems:'center',gap:6}}>
+                                  {s.type==='shift'&&(
+                                    <div style={{marginTop:3}}>
+                                      <span style={{fontSize:9,fontWeight:800,color:'#FFD54F',background:'rgba(255,213,79,0.12)',padding:'2px 6px',borderRadius:8}}>Available Shift</span>
+                                      {s.rate&&<span style={{fontSize:9,color:DIM,marginLeft:4}}>${s.rate}/hr</span>}
+                                    </div>
+                                  )}
+                                  {!s.isShift&&<div style={{marginTop:6,display:'flex',alignItems:'center',gap:6}}>
                                     {s.confirmedBy?.[coach.id]
                                       ?<>
                                         <span style={{fontSize:9,fontWeight:800,color:GREEN,background:'rgba(129,199,132,0.15)',padding:'2px 7px',borderRadius:10,letterSpacing:0.5}}>✓ Confirmed</span>
@@ -1177,7 +1185,7 @@ export default function App(){
                                           style={{background:'transparent',border:`1px solid ${GREEN}`,color:GREEN,fontSize:9,padding:'1px 7px',borderRadius:10,cursor:'pointer',fontFamily:'inherit'}}>Confirm</button>
                                       </>
                                     }
-                                  </div>
+                                  </div>}
                                   <div style={{position:'absolute',top:4,right:4,display:'flex',gap:3}}>
                                     <button onClick={()=>openEdit(s)} style={{background:'transparent',border:'none',color:GRAY3,cursor:'pointer',fontSize:12,lineHeight:1,padding:0}}
                                       onMouseEnter={e=>e.target.style.color=GOLD} onMouseLeave={e=>e.target.style.color=GRAY3}>✎</button>
@@ -1207,9 +1215,9 @@ export default function App(){
                         {getAllSessionsOnDate(opsSelDay).sort((a,b)=>a.time>b.time?1:-1).map(s=>{
                           const coach=coaches.find(c=>c.id===s.coachId)
                           return(
-                            <div key={s.id} style={{background:GRAY2,borderRadius:6,padding:'8px 10px',marginBottom:6,borderLeft:`3px solid ${s.type==='solo'?BLUE:s.type==='birthday'?GREEN:s.type==='rental'?PURPLE:s.type==='league'?ORANGE:GOLD}`,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                            <div key={s.id} style={{background:GRAY2,borderRadius:6,padding:'8px 10px',marginBottom:6,borderLeft:`3px solid ${s.type==='solo'?BLUE:s.type==='birthday'?GREEN:s.type==='rental'?PURPLE:s.type==='league'?ORANGE:s.type==='shift'?'#FFD54F':GOLD}`,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                               <div>
-                                <div style={{fontSize:13,fontWeight:700}}>{fmt12(s.time)} · {s.type==='solo'?`1:1 · ${s.clientName}`:s.type==='birthday'?`🎂 ${s.clientName}`:s.type==='rental'?`🏠 ${s.name}`:s.type==='league'?`⚽ ${s.name}`:s.type==='group'?`👥 ${s.name}`:s.name}</div>
+                                <div style={{fontSize:13,fontWeight:700}}>{fmt12(s.time)} · {s.type==='solo'?`1:1 · ${s.clientName}`:s.type==='birthday'?`🎂 ${s.clientName}`:s.type==='rental'?`🏠 ${s.name}`:s.type==='league'?`⚽ ${s.name}`:s.type==='shift'?`🟡 ${s.title}`:s.type==='group'?`👥 ${s.name}`:s.name}</div>
                                 <div style={{fontSize:11,color:DIM,marginTop:2}}>{coach?.name||'Unknown'}</div>
                               </div>
                               <div style={{display:'flex',gap:6}}>
@@ -2504,7 +2512,7 @@ export default function App(){
                   {sess.length===0
                     ?<div style={{textAlign:'center',padding:'60px 20px',color:DIM}}>{unavail?'Unavailable':'No sessions today'}</div>
                     :sess.map(s=>(
-                      <div key={s.id} style={{background:GRAY,borderRadius:9,padding:'14px 16px',marginBottom:10,borderLeft:`3px solid ${s.type==='solo'?BLUE:s.type==='birthday'?GREEN:s.type==='rental'?PURPLE:s.type==='league'?ORANGE:GOLD}`,display:'flex',alignItems:'flex-start',gap:14}}>
+                      <div key={s.id} style={{background:GRAY,borderRadius:9,padding:'14px 16px',marginBottom:10,borderLeft:`3px solid ${s.type==='solo'?BLUE:s.type==='birthday'?GREEN:s.type==='rental'?PURPLE:s.type==='league'?ORANGE:s.type==='shift'?'#FFD54F':GOLD}`,display:'flex',alignItems:'flex-start',gap:14}}>
                         <div style={{minWidth:64}}>
                           <div style={{fontSize:20,fontWeight:900,lineHeight:1}}>{fmt12(s.time)}</div>
                           <div style={{fontSize:10,color:DIM,marginTop:3}}>{s.duration}min</div>
@@ -2514,8 +2522,8 @@ export default function App(){
                             {s.type==='solo'?`1-on-1 · ${s.clientName}`:s.type==='birthday'?`🎂 ${s.clientName}`:s.type==='rental'?`🏠 ${s.name}`:s.type==='league'?`⚽ ${s.name}`:s.name}
                             {s.confirmedBy?.[loggedInCoach.id]&&<span style={{fontSize:10,background:'rgba(129,199,132,0.2)',color:GREEN,padding:'1px 7px',borderRadius:10,fontWeight:700}}>✓ Confirmed</span>}
                           </div>
-                          <div style={{fontSize:11,color:DIM,marginBottom:s.confirmedBy?.[loggedInCoach.id]?0:10}}>{s.type==='solo'?(s.notes||'No notes'):s.type==='birthday'?'Flat rate · $40':s.type==='rental'?'Rental · $12/hr':s.type==='league'?'League · $10/hr':s.type==='group'?(s.coachId===loggedInCoach.id?'Group · Lead':'Group · Assist'):`Group · ${s.duration}min`}</div>
-                          {!s.confirmedBy?.[loggedInCoach.id]&&(
+                          <div style={{fontSize:11,color:DIM,marginBottom:10}}>{s.type==='solo'?(s.notes||'No notes'):s.type==='birthday'?'Flat rate · $40':s.type==='rental'?'Rental · $12/hr':s.type==='league'?'League · $10/hr':s.type==='shift'?`Shift · $${s.rate||0}/hr`:s.type==='group'?(s.coachId===loggedInCoach.id?'Group · Lead':'Group · Assist'):`Group · ${s.duration}min`}</div>
+                          {!s.isShift&&!s.confirmedBy?.[loggedInCoach.id]&&(
                             <Btn gold onClick={()=>confirmSession(s.id)} style={{fontSize:11,padding:'5px 14px',marginTop:6}}>Confirm</Btn>
                           )}
                         </div>
@@ -2536,7 +2544,7 @@ export default function App(){
                     {sess.length===0
                       ?<div style={{fontSize:12,color:GRAY3,textAlign:'center',padding:'10px 0'}}>{unavail?'Unavailable':'No sessions'}</div>
                       :sess.map(s=>(
-                        <div key={s.id} style={{background:GRAY,borderRadius:9,padding:'12px 14px',marginBottom:7,borderLeft:`3px solid ${s.type==='solo'?BLUE:s.type==='birthday'?GREEN:s.type==='rental'?PURPLE:s.type==='league'?ORANGE:GOLD}`,display:'flex',alignItems:'flex-start',gap:12}}>
+                        <div key={s.id} style={{background:GRAY,borderRadius:9,padding:'12px 14px',marginBottom:7,borderLeft:`3px solid ${s.type==='solo'?BLUE:s.type==='birthday'?GREEN:s.type==='rental'?PURPLE:s.type==='league'?ORANGE:s.type==='shift'?'#FFD54F':GOLD}`,display:'flex',alignItems:'flex-start',gap:12}}>
                           <div style={{minWidth:60}}>
                             <div style={{fontSize:19,fontWeight:900,lineHeight:1}}>{fmt12(s.time)}</div>
                             <div style={{fontSize:10,color:DIM,marginTop:2}}>{s.duration}min</div>
@@ -2569,7 +2577,7 @@ export default function App(){
                       {getSessionsForCoach(loggedInCoach.id,coachSelDay).length===0
                         ?<div style={{fontSize:12,color:DIM,textAlign:'center',padding:'12px 0'}}>No sessions this day</div>
                         :getSessionsForCoach(loggedInCoach.id,coachSelDay).map(s=>(
-                          <div key={s.id} style={{background:GRAY2,borderRadius:6,padding:'9px 11px',marginBottom:6,borderLeft:`3px solid ${s.type==='solo'?BLUE:s.type==='birthday'?GREEN:s.type==='rental'?PURPLE:s.type==='league'?ORANGE:GOLD}`}}>
+                          <div key={s.id} style={{background:GRAY2,borderRadius:6,padding:'9px 11px',marginBottom:6,borderLeft:`3px solid ${s.type==='solo'?BLUE:s.type==='birthday'?GREEN:s.type==='rental'?PURPLE:s.type==='league'?ORANGE:s.type==='shift'?'#FFD54F':GOLD}`}}>
                             <div style={{fontSize:14,fontWeight:700}}>{fmt12(s.time)} · {s.type==='solo'?`1-on-1 · ${s.clientName}`:s.type==='birthday'?`🎂 ${s.clientName}`:s.type==='rental'?`🏠 ${s.name}`:s.type==='league'?`⚽ ${s.name}`:s.name}</div>
                             <div style={{fontSize:11,color:DIM,marginTop:2}}>{s.duration}min{s.type==='solo'&&s.notes?' · '+s.notes:''}</div>
                           </div>
@@ -2711,7 +2719,7 @@ export default function App(){
                     <div style={{fontSize:10,fontWeight:800,letterSpacing:2,textTransform:'uppercase',color:DIM,marginBottom:12}}>All Sessions</div>
                     {allSess.map(s=>{
                       const coach=coaches.find(c=>c.id===s.coachId)
-                      return(<div key={s.id} style={{background:GRAY,borderRadius:9,padding:'12px 14px',marginBottom:8,borderLeft:`3px solid ${s.type==='solo'?BLUE:s.type==='birthday'?GREEN:s.type==='rental'?PURPLE:s.type==='league'?ORANGE:GOLD}`,display:'flex',alignItems:'center',gap:14}}>
+                      return(<div key={s.id} style={{background:GRAY,borderRadius:9,padding:'12px 14px',marginBottom:8,borderLeft:`3px solid ${s.type==='solo'?BLUE:s.type==='birthday'?GREEN:s.type==='rental'?PURPLE:s.type==='league'?ORANGE:s.type==='shift'?'#FFD54F':GOLD}`,display:'flex',alignItems:'center',gap:14}}>
                         <div style={{minWidth:68}}><div style={{fontSize:18,fontWeight:900,lineHeight:1}}>{fmt12(s.time)}</div><div style={{fontSize:10,color:DIM,marginTop:2}}>{s.duration}min</div></div>
                         <div style={{flex:1}}>
                           <div style={{fontSize:14,fontWeight:700}}>{s.type==='solo'?`1-on-1 · ${s.clientName}`:s.type==='birthday'?`🎂 ${s.clientName}`:s.type==='rental'?`🏠 ${s.name}`:s.type==='league'?`⚽ ${s.name}`:s.name}</div>
